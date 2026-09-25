@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
  */
 class AudioCapture {
 
-    private val sampleRate = WavFileReader.SAMPLE_RATE
+    private val sampleRate = OfflineSpeechRecognizer.SAMPLE_RATE
 
     /** 预分配缓冲区，够录 [MAX_SECONDS] 秒。录满就自动停止，避免内存无限增长。 */
     private val buffer = ShortArray(sampleRate * MAX_SECONDS)

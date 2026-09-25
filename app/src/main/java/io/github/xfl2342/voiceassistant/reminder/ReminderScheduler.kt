@@ -59,20 +59,6 @@ class ReminderScheduler(private val context: Context) {
         alarmManager.cancel(pendingIntent(reminderId, eventId = "", title = ""))
     }
 
-    /**
-     * 开机或应用更新后，把未来所有提醒重新注册一遍。
-     *
-     * 系统重启会清空所有闹钟，不做这件事提醒就再也不会响了。
-     */
-    suspend fun rescheduleAll() {
-        val dao = io.github.xfl2342.voiceassistant.data.db.AppDatabase
-            .get(context)
-            .reminderDao()
-        dao.findUpcomingWithTitle(System.currentTimeMillis()).forEach { upcoming ->
-            schedule(upcoming.reminderId, upcoming.eventId, upcoming.title, upcoming.triggerAt)
-        }
-    }
-
     private fun pendingIntent(reminderId: String, eventId: String, title: String): PendingIntent {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             action = ReminderReceiver.ACTION_REMINDER

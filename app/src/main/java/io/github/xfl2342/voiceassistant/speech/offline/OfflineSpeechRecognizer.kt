@@ -70,7 +70,7 @@ class OfflineSpeechRecognizer(
         val engine = ensureRecognizer() ?: return ""
         val stream = engine.createStream()
         return try {
-            stream.acceptWaveform(samples, WavFileReader.SAMPLE_RATE)
+            stream.acceptWaveform(samples, SAMPLE_RATE)
             engine.decode(stream)
             engine.getResult(stream).text
         } finally {
@@ -95,7 +95,7 @@ class OfflineSpeechRecognizer(
         return try {
             val config = OfflineRecognizerConfig(
                 featConfig = FeatureConfig(
-                    sampleRate = WavFileReader.SAMPLE_RATE,
+                    sampleRate = SAMPLE_RATE,
                     featureDim = FEATURE_DIM,
                 ),
                 modelConfig = OfflineModelConfig(
@@ -125,6 +125,9 @@ class OfflineSpeechRecognizer(
     companion object {
 
         private const val TAG = "OfflineAsr"
+
+        /** 语音识别的标准采样率，录音与模型都按这个来。 */
+        const val SAMPLE_RATE = 16_000
 
         /** 模型文件名，与下载的模型包保持一致。 */
         const val MODEL_FILE = "model.int8.onnx"
