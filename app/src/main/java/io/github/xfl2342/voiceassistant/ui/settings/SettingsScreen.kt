@@ -20,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,11 +33,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import io.github.xfl2342.voiceassistant.ai.DeepSeekClient
 import io.github.xfl2342.voiceassistant.data.SettingsStore
+import io.github.xfl2342.voiceassistant.data.ThemeMode
 import io.github.xfl2342.voiceassistant.data.TimeInputMode
 import io.github.xfl2342.voiceassistant.speech.offline.ModelInstaller
 import kotlinx.coroutines.launch
+import java.time.DayOfWeek
 
 /**
  * 设置中心。
@@ -50,9 +56,16 @@ fun SettingsScreen(
     settingsStore: SettingsStore,
     onBack: () -> Unit,
     onOpenReminderSettings: () -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onWeekStartChange: (DayOfWeek) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var timeInputMode by remember { mutableStateOf(settingsStore.timeInputMode) }
+    var themeMode by remember { mutableStateOf(settingsStore.themeMode) }
+    var weekStartDay by remember { mutableStateOf(settingsStore.weekStartDay) }
+    var apiKey by remember { mutableStateOf(settingsStore.deepSeekApiKey.orEmpty()) }
+    var deepSeekModel by remember { mutableStateOf(settingsStore.deepSeekModel) }
+    var showKey by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val installer = remember { ModelInstaller(context) }
 
@@ -72,6 +85,69 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "DeepSeek（AI 解析）",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = {
+                        apiKey = it
+                        // 边输边存，免得改完忘了保存。
+                        settingsStore.deepSeekApiKey = it
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("API Key") },
+                    singleLine = true,
+                    visualTransformation = if (showKey) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        TextButton(onClick = { showKey = !showKey }) {
+                            Text(if (showKey) "隐藏" else "显示")
+                        }
+                    },
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(DeepSeekClient.MODEL_CHAT, DeepSeekClient.MODEL_REASONER).forEach { model ->
+                        FilterChip(
+                            selected = deepSeekModel == model,
+                            onClick = {
+                                deepSeekModel = model
+                                settingsStore.deepSeekModel = model
+                            },
+                            label = { Text(model) },
+                        )
+                    }
+                    FilterChip(
+                        selected = false,
+                        onClick = {
+                            apiKey = ""
+                            settingsStore.deepSeekApiKey = null
+                        },
+                        label = { Text("清除 Key") },
+                    )
+                }
+                Text(
+                    text = "Key 用系统密钥库加密后存在本机，不会上传到别处；" +
+                        "应用直接向 DeepSeek 官方接口发起请求。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -109,6 +185,63 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "每周起始日",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(DayOfWeek.MONDAY, DayOfWeek.SUNDAY).forEach { day ->
+                        FilterChip(
+                            selected = weekStartDay == day,
+                            onClick = {
+                                weekStartDay = day
+                                settingsStore.weekStartDay = day
+                                onWeekStartChange(day)
+                            },
+                            label = { Text(if (day == DayOfWeek.MONDAY) "周一" else "周日") },
+                        )
+                    }
+                }
+                Text(
+                    text = "决定日历每一行从哪天开始。国内习惯是周一。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "深色模式",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = themeMode == mode,
+                            onClick = {
+                                themeMode = mode
+                                settingsStore.themeMode = mode
+                                onThemeModeChange(mode)
+                            },
+                            label = { Text(mode.label) },
+                        )
+                    }
+                }
             }
         }
 

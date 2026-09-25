@@ -224,6 +224,24 @@ class RecurrenceExpanderTest {
         assertEquals(listOf(monday.plusDays(6)), result.map { it.date })
     }
 
+    @Test
+    fun `开始日一定会出现一次_哪怕它属于上一周`() {
+        // 2026-09-06 是周日。若一周从周一开始，它落在 08-31 那一周；
+        // 「隔周」规则按周划分时不能把行程自己的第一天排除掉。
+        val sunday = LocalDate.of(2026, 9, 6)
+        val event = timedEvent(at(sunday, 9), at(sunday, 10), id = "biweekly")
+        val rule = rule(
+            event.id,
+            RecurrenceRuleEntity.FREQUENCY_WEEKLY,
+            byDay = "SU",
+            interval = 2,
+        )
+
+        val result = expand(listOf(event), listOf(rule), sunday, sunday.plusDays(28))
+
+        assertTrue(result.any { it.date == sunday })
+    }
+
     private fun expand(
         events: List<EventEntity>,
         rules: List<RecurrenceRuleEntity>,

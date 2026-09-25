@@ -94,9 +94,6 @@ fun RecordScreen(
     var speechStatus by remember { mutableStateOf("按住下面的按钮说话，说多久都行，松开自动识别") }
     var recognizedText by remember { mutableStateOf("") }
 
-    var apiKey by remember { mutableStateOf(settingsStore.deepSeekApiKey.orEmpty()) }
-    var model by remember { mutableStateOf(settingsStore.deepSeekModel) }
-    var showKey by remember { mutableStateOf(false) }
     var sentence by remember { mutableStateOf("") }
     var parsing by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -157,26 +154,25 @@ fun RecordScreen(
 
     fun parse() {
         val text = sentence.trim()
-        when {
-            text.isEmpty() -> {
-                errorText = "请先说一句或输入一句话"
-                return
-            }
-            apiKey.isBlank() -> {
-                errorText = "请先填写 DeepSeek API Key"
-                return
-            }
+        if (text.isEmpty()) {
+            errorText = "请先说一句或输入一句话"
+            return
         }
 
-        settingsStore.deepSeekApiKey = apiKey.trim()
-        settingsStore.deepSeekModel = model
+        // Key 统一在设置里配置，这里只负责用。
+        val apiKey = settingsStore.deepSeekApiKey
+        if (apiKey.isNullOrBlank()) {
+            errorText = "还没有配置 DeepSeek API Key，请到右上角「设置」里填写后再试"
+            return
+        }
+
         parsing = true
         errorText = null
         draft = null
 
         scope.launch {
             val outcome = withContext(Dispatchers.IO) {
-                DeepSeekClient(apiKey.trim(), model).parseEvent(text)
+                DeepSeekClient(apiKey, settingsStore.deepSeekModel).parseEvent(text)
             }
             parsing = false
             when (outcome) {
@@ -333,23 +329,6 @@ fun RecordScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("DeepSeek API Key") },
-                    singleLine = true,
-                    visualTransformation = if (showKey) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
-                    trailingIcon = {
-                        TextButton(onClick = { showKey = !showKey }) {
-                            Text(if (showKey) "隐藏" else "显示")
-                        }
-                    },
-                )
-                OutlinedTextField(
                     value = sentence,
                     onValueChange = { sentence = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -357,37 +336,14 @@ fun RecordScreen(
                     minLines = 2,
                     placeholder = { Text("例如：明天下午三点开项目评审会，提前十五分钟提醒我") },
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = model == DeepSeekClient.MODEL_CHAT,
-                        onClick = { model = DeepSeekClient.MODEL_CHAT },
-                        label = { Text("deepseek-chat") },
-                    )
-                    FilterChip(
-                        selected = model == DeepSeekClient.MODEL_REASONER,
-                        onClick = { model = DeepSeekClient.MODEL_REASONER },
-                        label = { Text("deepseek-reasoner") },
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = { parse() }, enabled = !parsing) {
-                        if (parsing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Text("解析")
-                        }
-                    }
-                    TextButton(
-                        onClick = {
-                            apiKey = ""
-                            settingsStore.deepSeekApiKey = null
-                            draft = null
-                        },
-                    ) {
-                        Text("清除 Key")
+                Button(onClick = { parse() }, enabled = !parsing && !saving) {
+                    if (parsing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text("解析")
                     }
                 }
             }

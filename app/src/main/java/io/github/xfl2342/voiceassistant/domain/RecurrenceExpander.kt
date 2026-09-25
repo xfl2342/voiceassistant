@@ -34,6 +34,7 @@ object RecurrenceExpander {
         from: LocalDate,
         to: LocalDate,
         zone: ZoneId,
+        weekStartDay: DayOfWeek = DayOfWeek.MONDAY,
     ): List<EventOccurrence> {
         if (to.isBefore(from)) return emptyList()
 
@@ -41,7 +42,9 @@ object RecurrenceExpander {
         return events
             .asSequence()
             .filter { !it.deleted }
-            .flatMap { expandOne(it, rulesByEvent[it.id].orEmpty().firstOrNull(), from, to, zone) }
+            .flatMap {
+                expandOne(it, rulesByEvent[it.id].orEmpty().firstOrNull(), from, to, zone, weekStartDay)
+            }
             .sortedWith(
                 compareBy(
                     { it.date },
@@ -58,9 +61,10 @@ object RecurrenceExpander {
         from: LocalDate,
         to: LocalDate,
         zone: ZoneId,
+        weekStartDay: DayOfWeek,
     ): List<EventOccurrence> {
         val anchor = anchorDate(event, zone) ?: return emptyList()
-        val startDates = occurrenceStartDates(anchor, rule, from, to)
+        val startDates = occurrenceStartDates(anchor, rule, from, to, weekStartDay)
         if (startDates.isEmpty()) return emptyList()
 
         return if (event.allDay) {
@@ -141,6 +145,7 @@ object RecurrenceExpander {
         rule: RecurrenceRuleEntity?,
         from: LocalDate,
         to: LocalDate,
+        weekStartDay: DayOfWeek,
     ): List<LocalDate> {
         if (rule == null) {
             return if (anchor in from..to) listOf(anchor) else emptyList()
@@ -155,7 +160,7 @@ object RecurrenceExpander {
         return when (rule.frequency) {
             RecurrenceRuleEntity.FREQUENCY_DAILY -> dailyDates(anchor, step, windowStart, windowEnd)
             RecurrenceRuleEntity.FREQUENCY_WEEKLY ->
-                weeklyDates(anchor, step, rule.byDay, windowStart, windowEnd)
+                weeklyDates(anchor, step, rule.byDay, windowStart, windowEnd, weekStartDay)
             else -> emptyList()
         }
     }
@@ -184,15 +189,17 @@ object RecurrenceExpander {
         byDay: String?,
         windowStart: LocalDate,
         windowEnd: LocalDate,
+        weekStartDay: DayOfWeek,
     ): List<LocalDate> {
         val days: Set<DayOfWeek> = DayOfWeekCodes.parse(byDay).ifEmpty { setOf(anchor.dayOfWeek) }
-        val anchorWeekStart = weekStart(anchor)
+        val anchorWeekStart = weekStart(anchor, weekStartDay)
 
         val dates = mutableListOf<LocalDate>()
         var current = windowStart
         while (!current.isAfter(windowEnd) && dates.size < MAX_OCCURRENCES) {
             if (days.contains(current.dayOfWeek)) {
-                val weeksApart = ChronoUnit.WEEKS.between(anchorWeekStart, weekStart(current))
+                val weeksApart =
+                    ChronoUnit.WEEKS.between(anchorWeekStart, weekStart(current, weekStartDay))
                 if (weeksApart % step == 0L) dates += current
             }
             current = current.plusDays(1)
@@ -207,7 +214,7 @@ object RecurrenceExpander {
             null
         }
 
-    /** 一周的第一天：周一。 */
-    private fun weekStart(date: LocalDate): LocalDate =
-        date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    /** 按设置取出一周的第一天（默认周一）。 */
+    private fun weekStart(date: LocalDate, firstDayOfWeek: DayOfWeek): LocalDate =
+        date.with(TemporalAdjusters.previousOrSame(firstDayOfWeek))
 }

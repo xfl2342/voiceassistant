@@ -63,6 +63,7 @@ fun CalendarScreen(
     onEventClick: (String) -> Unit,
     onOpenReminderSettings: () -> Unit,
     onOpenSettings: () -> Unit,
+    weekStartDay: DayOfWeek,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -76,12 +77,12 @@ fun CalendarScreen(
         .collectAsState(initial = CalendarData(emptyList(), emptyList()))
 
     // 一次算出一整屏（6 周）的行程，翻月时只需要重算这一块。
-    val gridStart = visibleMonth.atDay(1).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val gridStart = visibleMonth.atDay(1).with(TemporalAdjusters.previousOrSame(weekStartDay))
     val gridEnd = gridStart.plusDays(GRID_DAYS - 1L)
 
-    val occurrencesByDate = remember(calendarData, gridStart) {
+    val occurrencesByDate = remember(calendarData, gridStart, weekStartDay) {
         RecurrenceExpander
-            .expand(calendarData.events, calendarData.rules, gridStart, gridEnd, zone)
+            .expand(calendarData.events, calendarData.rules, gridStart, gridEnd, zone, weekStartDay)
             .groupBy { it.date }
     }
 
@@ -116,7 +117,7 @@ fun CalendarScreen(
                     selectedDay = today
                 },
             )
-            WeekdayHeader()
+            WeekdayHeader(weekStartDay)
             MonthGrid(
                 gridStart = gridStart,
                 month = visibleMonth,
@@ -172,9 +173,10 @@ private fun MonthHeader(
 }
 
 @Composable
-private fun WeekdayHeader() {
+private fun WeekdayHeader(weekStartDay: DayOfWeek) {
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-        WEEKDAY_LABELS.forEach { label ->
+        (0 until DAYS_PER_WEEK).forEach { offset ->
+            val label = WEEKDAY_LABELS[weekStartDay.plus(offset.toLong()).value - 1]
             Text(
                 text = label,
                 modifier = Modifier.weight(1f),

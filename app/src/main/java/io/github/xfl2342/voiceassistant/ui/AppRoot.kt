@@ -2,6 +2,7 @@ package io.github.xfl2342.voiceassistant.ui
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -10,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import io.github.xfl2342.voiceassistant.AppGraph
+import io.github.xfl2342.voiceassistant.data.ThemeMode
 import io.github.xfl2342.voiceassistant.ui.calendar.CalendarScreen
 import io.github.xfl2342.voiceassistant.ui.detail.EventDetailScreen
 import io.github.xfl2342.voiceassistant.ui.edit.EventEditScreen
@@ -37,8 +39,17 @@ private sealed interface AppScreen {
 @Composable
 fun AppRoot(graph: AppGraph) {
     var screen by remember { mutableStateOf<AppScreen>(AppScreen.Calendar) }
+    // 主题与每周起始日由设置页修改，这里持有状态以便立刻生效。
+    var themeMode by remember { mutableStateOf(graph.settingsStore.themeMode) }
+    var weekStartDay by remember { mutableStateOf(graph.settingsStore.weekStartDay) }
 
-    VoiceAssistantTheme {
+    VoiceAssistantTheme(
+        darkTheme = when (themeMode) {
+            ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            ThemeMode.LIGHT -> false
+            ThemeMode.DARK -> true
+        },
+    ) {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             val padded = Modifier.padding(innerPadding)
             when (val current = screen) {
@@ -48,6 +59,7 @@ fun AppRoot(graph: AppGraph) {
                     onEventClick = { screen = AppScreen.Detail(it) },
                     onOpenReminderSettings = { screen = AppScreen.ReminderSettings() },
                     onOpenSettings = { screen = AppScreen.Settings },
+                    weekStartDay = weekStartDay,
                     modifier = padded,
                 )
 
@@ -81,6 +93,8 @@ fun AppRoot(graph: AppGraph) {
                     settingsStore = graph.settingsStore,
                     onBack = { screen = AppScreen.Calendar },
                     onOpenReminderSettings = { screen = AppScreen.ReminderSettings(fromSettings = true) },
+                    onThemeModeChange = { themeMode = it },
+                    onWeekStartChange = { weekStartDay = it },
                     modifier = padded,
                 )
 
