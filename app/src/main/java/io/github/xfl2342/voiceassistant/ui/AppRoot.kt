@@ -14,6 +14,7 @@ import io.github.xfl2342.voiceassistant.ui.calendar.CalendarScreen
 import io.github.xfl2342.voiceassistant.ui.detail.EventDetailScreen
 import io.github.xfl2342.voiceassistant.ui.edit.EventEditScreen
 import io.github.xfl2342.voiceassistant.ui.record.RecordScreen
+import io.github.xfl2342.voiceassistant.ui.settings.ReminderSettingsScreen
 import io.github.xfl2342.voiceassistant.ui.theme.VoiceAssistantTheme
 
 /** 当前显示的页面。页面不多，用状态切换就够了。 */
@@ -22,6 +23,7 @@ private sealed interface AppScreen {
     data object Record : AppScreen
     data class Detail(val eventId: String) : AppScreen
     data class Edit(val eventId: String) : AppScreen
+    data object ReminderSettings : AppScreen
 }
 
 /**
@@ -41,6 +43,7 @@ fun AppRoot(graph: AppGraph) {
                     repository = graph.eventRepository,
                     onRecordClick = { screen = AppScreen.Record },
                     onEventClick = { screen = AppScreen.Detail(it) },
+                    onOpenReminderSettings = { screen = AppScreen.ReminderSettings },
                     modifier = padded,
                 )
 
@@ -66,6 +69,11 @@ fun AppRoot(graph: AppGraph) {
                     eventId = current.eventId,
                     onBack = { screen = AppScreen.Detail(current.eventId) },
                     onSaved = { screen = AppScreen.Detail(current.eventId) },
+                    modifier = padded,
+                )
+
+                AppScreen.ReminderSettings -> ReminderSettingsScreen(
+                    onBack = { screen = AppScreen.Calendar },
                     modifier = padded,
                 )
             }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,7 @@ import io.github.xfl2342.voiceassistant.data.CalendarData
 import io.github.xfl2342.voiceassistant.data.EventRepository
 import io.github.xfl2342.voiceassistant.domain.EventOccurrence
 import io.github.xfl2342.voiceassistant.domain.RecurrenceExpander
+import io.github.xfl2342.voiceassistant.reminder.ReminderPermissions
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -58,8 +61,12 @@ fun CalendarScreen(
     repository: EventRepository,
     onRecordClick: () -> Unit,
     onEventClick: (String) -> Unit,
+    onOpenReminderSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    // 每次进入日历都重新判断一次：从设置页回来时会重新组合，状态自然是最新的。
+    val reminderReady = remember { ReminderPermissions.read(context).allGood }
     var visibleMonth by remember { mutableStateOf(YearMonth.now(zone)) }
     var selectedDay by remember { mutableStateOf(LocalDate.now(zone)) }
 
@@ -79,6 +86,24 @@ fun CalendarScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
+            if (!reminderReady) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .clickable { onOpenReminderSettings() },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+                ) {
+                    Text(
+                        text = "提醒可能不准时：还有系统设置没开启，点这里处理",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                }
+            }
             MonthHeader(
                 month = visibleMonth,
                 onPrevious = { visibleMonth = visibleMonth.minusMonths(1) },
