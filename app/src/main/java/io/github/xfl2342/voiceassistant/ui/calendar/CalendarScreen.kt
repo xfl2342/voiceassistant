@@ -243,6 +243,7 @@ private fun DayCell(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .clickable { onClick() }
             .clip(RoundedCornerShape(10.dp))
             .background(background)
             .padding(4.dp),

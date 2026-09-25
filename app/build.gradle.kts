@@ -20,6 +20,11 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            // 只打包 arm64：目标机型是 arm64，另外三种架构白白占掉一半体积。
+            abiFilters += "arm64-v8a"
+        }
     }
 
     buildTypes {
@@ -51,6 +56,8 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     // 离线语音识别引擎（sherpa-onnx 的安卓封装，含各架构原生库）
     implementation(libs.sherpa.onnx.android)
+    // 解压模型压缩包（安卓没有内置 bz2 解压）
+    implementation(libs.commons.compress)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

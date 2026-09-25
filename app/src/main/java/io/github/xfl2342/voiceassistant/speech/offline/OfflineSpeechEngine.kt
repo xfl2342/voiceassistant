@@ -37,7 +37,14 @@ class OfflineSpeechEngine(
 
         val problem = recognizer.modelStatus()
         if (problem != null) {
-            onEvent(SpeechEvent.Failed(NO_ENGINE, "MODEL_MISSING", problem))
+            Log.w(TAG, "模型不可用：$problem")
+            onEvent(
+                SpeechEvent.Failed(
+                    NO_ENGINE,
+                    "MODEL_MISSING",
+                    "还没有安装语音模型。请到「设置 → 语音模型」里下载一次（约 74 MB），装好后就不再需要联网。",
+                )
+            )
             return
         }
 

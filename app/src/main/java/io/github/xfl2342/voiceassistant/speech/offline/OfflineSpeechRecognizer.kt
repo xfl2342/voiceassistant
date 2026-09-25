@@ -146,5 +146,9 @@ class OfflineSpeechRecognizer(
          * 也不需要任何存储权限。
          */
         fun defaultModelDir(context: Context): File = File(context.filesDir, "sherpa")
+
+        /** 只判断两个模型文件在不在，用来给界面显示状态。 */
+        fun isModelPresent(dir: File): Boolean =
+            File(dir, MODEL_FILE).isFile && File(dir, TOKENS_FILE).isFile
     }
 }
