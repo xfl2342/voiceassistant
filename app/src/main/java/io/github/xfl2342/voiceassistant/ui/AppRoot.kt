@@ -15,6 +15,7 @@ import io.github.xfl2342.voiceassistant.ui.detail.EventDetailScreen
 import io.github.xfl2342.voiceassistant.ui.edit.EventEditScreen
 import io.github.xfl2342.voiceassistant.ui.record.RecordScreen
 import io.github.xfl2342.voiceassistant.ui.settings.ReminderSettingsScreen
+import io.github.xfl2342.voiceassistant.ui.settings.SettingsScreen
 import io.github.xfl2342.voiceassistant.ui.theme.VoiceAssistantTheme
 
 /** 当前显示的页面。页面不多，用状态切换就够了。 */
@@ -23,7 +24,9 @@ private sealed interface AppScreen {
     data object Record : AppScreen
     data class Detail(val eventId: String) : AppScreen
     data class Edit(val eventId: String) : AppScreen
-    data object ReminderSettings : AppScreen
+    data object Settings : AppScreen
+    /** 提醒设置：可能从日历的提示条进来，也可能从设置进来，返回时回到来的地方。 */
+    data class ReminderSettings(val fromSettings: Boolean = false) : AppScreen
 }
 
 /**
@@ -43,7 +46,8 @@ fun AppRoot(graph: AppGraph) {
                     repository = graph.eventRepository,
                     onRecordClick = { screen = AppScreen.Record },
                     onEventClick = { screen = AppScreen.Detail(it) },
-                    onOpenReminderSettings = { screen = AppScreen.ReminderSettings },
+                    onOpenReminderSettings = { screen = AppScreen.ReminderSettings() },
+                    onOpenSettings = { screen = AppScreen.Settings },
                     modifier = padded,
                 )
 
@@ -66,14 +70,24 @@ fun AppRoot(graph: AppGraph) {
 
                 is AppScreen.Edit -> EventEditScreen(
                     service = graph.eventService,
+                    settingsStore = graph.settingsStore,
                     eventId = current.eventId,
                     onBack = { screen = AppScreen.Detail(current.eventId) },
                     onSaved = { screen = AppScreen.Detail(current.eventId) },
                     modifier = padded,
                 )
 
-                AppScreen.ReminderSettings -> ReminderSettingsScreen(
+                AppScreen.Settings -> SettingsScreen(
+                    settingsStore = graph.settingsStore,
                     onBack = { screen = AppScreen.Calendar },
+                    onOpenReminderSettings = { screen = AppScreen.ReminderSettings(fromSettings = true) },
+                    modifier = padded,
+                )
+
+                is AppScreen.ReminderSettings -> ReminderSettingsScreen(
+                    onBack = {
+                        screen = if (current.fromSettings) AppScreen.Settings else AppScreen.Calendar
+                    },
                     modifier = padded,
                 )
             }

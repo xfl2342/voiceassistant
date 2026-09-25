@@ -3,13 +3,14 @@ package io.github.xfl2342.voiceassistant.ui.edit
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -20,9 +21,11 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimeInput
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -36,15 +39,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.xfl2342.voiceassistant.data.EventDetail
+import io.github.xfl2342.voiceassistant.data.SettingsStore
+import io.github.xfl2342.voiceassistant.data.TimeInputMode
 import io.github.xfl2342.voiceassistant.data.db.EventEntity
 import io.github.xfl2342.voiceassistant.domain.EventSaveBundle
 import io.github.xfl2342.voiceassistant.domain.EventService
 import io.github.xfl2342.voiceassistant.domain.ReminderPlanner
 import io.github.xfl2342.voiceassistant.domain.ReminderPreset
 import io.github.xfl2342.voiceassistant.ui.components.EventFormat
+import io.github.xfl2342.voiceassistant.ui.components.WheelTimePicker
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
@@ -61,10 +68,11 @@ private enum class TimeField { START, END }
  *
  * 只改「行程本身」（标题、时间、地点、提醒）；重复规则保持原样，不在这里改。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EventEditScreen(
     service: EventService,
+    settingsStore: SettingsStore,
     eventId: String,
     onBack: () -> Unit,
     onSaved: () -> Unit,
@@ -72,6 +80,7 @@ fun EventEditScreen(
 ) {
     val zone = remember { ZoneId.of(EventEntity.DEFAULT_TIME_ZONE) }
     val scope = rememberCoroutineScope()
+    val timeInputMode = remember { settingsStore.timeInputMode }
 
     var detail by remember { mutableStateOf<EventDetail?>(null) }
     var title by remember { mutableStateOf("") }
@@ -257,7 +266,11 @@ fun EventEditScreen(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 用可换行的布局：预设多的时候不至于把最后一个挤出屏幕。
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     ReminderPreset.entries.forEach { preset ->
                         FilterChip(
                             selected = reminderMinutes == preset.minutesBefore,
@@ -265,12 +278,12 @@ fun EventEditScreen(
                             label = { Text(ReminderPreset.describe(preset.minutesBefore)) },
                         )
                     }
+                    FilterChip(
+                        selected = reminderMinutes == null,
+                        onClick = { reminderMinutes = null },
+                        label = { Text("不提醒") },
+                    )
                 }
-                FilterChip(
-                    selected = reminderMinutes == null,
-                    onClick = { reminderMinutes = null },
-                    label = { Text("不提醒") },
-                )
             }
         }
 
@@ -335,31 +348,61 @@ fun EventEditScreen(
     }
 
     timeTarget?.let { target ->
-        key(target) {
+        key(target, timeInputMode) {
             val initial = if (target == TimeField.START) startTime else endTime
+            var wheelHour by remember { mutableStateOf(initial.hour) }
+            var wheelMinute by remember { mutableStateOf(initial.minute) }
             val state = rememberTimePickerState(
                 initialHour = initial.hour,
                 initialMinute = initial.minute,
                 is24Hour = true,
             )
-            AlertDialog(
-                onDismissRequest = { timeTarget = null },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            val picked = LocalTime.of(state.hour, state.minute)
-                            if (target == TimeField.START) startTime = picked else endTime = picked
-                            timeTarget = null
-                        }
+            // 这里刻意不用 AlertDialog：它的宽度约束会把 24 小时表盘的内圈裁掉
+            // （13–23 点的数字在内圈上），看起来就像只能选 12 小时。
+            Dialog(onDismissRequest = { timeTarget = null }) {
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    tonalElevation = 6.dp,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text("确定")
+                        // 用哪种方式在「设置 → 选择时间的方式」里切换，这里只按设置显示。
+                        when (timeInputMode) {
+                            TimeInputMode.WHEEL -> WheelTimePicker(
+                                hour = wheelHour,
+                                minute = wheelMinute,
+                                onHourChange = { wheelHour = it },
+                                onMinuteChange = { wheelMinute = it },
+                            )
+                            TimeInputMode.INPUT -> TimeInput(state = state)
+                            TimeInputMode.DIAL -> TimePicker(state = state)
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = { timeTarget = null }) { Text("取消") }
+                            TextButton(
+                                onClick = {
+                                    val picked = if (timeInputMode == TimeInputMode.WHEEL) {
+                                        LocalTime.of(wheelHour, wheelMinute)
+                                    } else {
+                                        LocalTime.of(state.hour, state.minute)
+                                    }
+                                    if (target == TimeField.START) startTime = picked else endTime = picked
+                                    timeTarget = null
+                                }
+                            ) {
+                                Text("确定")
+                            }
+                        }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { timeTarget = null }) { Text("取消") }
-                },
-                text = { TimePicker(state = state) },
-            )
+                }
+            }
         }
     }
 }

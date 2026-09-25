@@ -37,10 +37,18 @@ class SettingsStore(context: Context) {
             prefs.edit().putString(KEY_MODEL, value).apply()
         }
 
+    /** 选择时间的方式，默认滚轮。 */
+    var timeInputMode: TimeInputMode
+        get() = TimeInputMode.fromName(prefs.getString(KEY_TIME_INPUT, null))
+        set(value) {
+            prefs.edit().putString(KEY_TIME_INPUT, value.name).apply()
+        }
+
     private companion object {
         const val PREFS_NAME = "settings"
         const val KEY_API_KEY = "deepseek_api_key"
         const val KEY_MODEL = "deepseek_model"
+        const val KEY_TIME_INPUT = "time_input_mode"
         const val DEFAULT_MODEL = "deepseek-chat"
     }
 }

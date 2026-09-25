@@ -62,6 +62,7 @@ fun CalendarScreen(
     onRecordClick: () -> Unit,
     onEventClick: (String) -> Unit,
     onOpenReminderSettings: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -108,6 +109,7 @@ fun CalendarScreen(
                 month = visibleMonth,
                 onPrevious = { visibleMonth = visibleMonth.minusMonths(1) },
                 onNext = { visibleMonth = visibleMonth.plusMonths(1) },
+                onOpenSettings = onOpenSettings,
                 onToday = {
                     val today = LocalDate.now(zone)
                     visibleMonth = YearMonth.from(today)
@@ -147,6 +149,7 @@ private fun MonthHeader(
     month: YearMonth,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onOpenSettings: () -> Unit,
     onToday: () -> Unit,
 ) {
     Row(
@@ -164,6 +167,7 @@ private fun MonthHeader(
         TextButton(onClick = onToday) { Text("今天") }
         TextButton(onClick = onPrevious) { Text("‹") }
         TextButton(onClick = onNext) { Text("›") }
+        TextButton(onClick = onOpenSettings) { Text("设置") }
     }
 }
 
