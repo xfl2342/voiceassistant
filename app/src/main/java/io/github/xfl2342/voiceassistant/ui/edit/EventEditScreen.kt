@@ -46,6 +46,8 @@ import io.github.xfl2342.voiceassistant.data.EventDetail
 import io.github.xfl2342.voiceassistant.data.SettingsStore
 import io.github.xfl2342.voiceassistant.data.TimeInputMode
 import io.github.xfl2342.voiceassistant.data.db.EventEntity
+import io.github.xfl2342.voiceassistant.data.db.RecurrenceRuleEntity
+import io.github.xfl2342.voiceassistant.domain.DayOfWeekCodes
 import io.github.xfl2342.voiceassistant.domain.EventSaveBundle
 import io.github.xfl2342.voiceassistant.domain.EventService
 import io.github.xfl2342.voiceassistant.domain.ReminderPlanner
@@ -54,14 +56,23 @@ import io.github.xfl2342.voiceassistant.ui.components.EventFormat
 import io.github.xfl2342.voiceassistant.ui.components.WheelTimePicker
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.UUID
 
 /** 编辑时要操作的时间字段。 */
-private enum class TimeField { START, END }
+private enum class TimeField { START, END, REPEAT_END }
+
+/** 重复方式。 */
+private enum class RepeatMode(val label: String) {
+    NONE("不重复"),
+    DAILY("每天"),
+    WEEKLY("每周"),
+}
 
 /**
  * 编辑已有行程。
@@ -91,6 +102,10 @@ fun EventEditScreen(
     var endTime by remember { mutableStateOf(LocalTime.of(10, 0)) }
     var location by remember { mutableStateOf("") }
     var reminderMinutes by remember { mutableStateOf<Int?>(ReminderPreset.NORMAL.minutesBefore) }
+    var repeatMode by remember { mutableStateOf(RepeatMode.NONE) }
+    var repeatDays by remember { mutableStateOf<Set<DayOfWeek>>(emptySet()) }
+    var repeatEndType by remember { mutableStateOf(RecurrenceRuleEntity.END_TYPE_NEVER) }
+    var repeatEndDate by remember { mutableStateOf<LocalDate?>(null) }
     var saving by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var dateTarget by remember { mutableStateOf<TimeField?>(null) }
@@ -116,6 +131,16 @@ fun EventEditScreen(
             endTime = end?.toLocalTime() ?: startTime.plusHours(1)
         }
         reminderMinutes = loaded.reminders.firstOrNull { it.minutesBefore != null }?.minutesBefore
+        loaded.rule?.let { rule ->
+            repeatMode = when (rule.frequency) {
+                RecurrenceRuleEntity.FREQUENCY_DAILY -> RepeatMode.DAILY
+                RecurrenceRuleEntity.FREQUENCY_WEEKLY -> RepeatMode.WEEKLY
+                else -> RepeatMode.NONE
+            }
+            repeatDays = DayOfWeekCodes.parse(rule.byDay)
+            repeatEndType = rule.endType
+            repeatEndDate = rule.endEpochDay?.let(LocalDate::ofEpochDay)
+        }
     }
 
     BackHandler(onBack = onBack)
@@ -151,6 +176,38 @@ fun EventEditScreen(
         }
     }
 
+    /** 根据界面上的选择生成重复规则；选择「不重复」时返回 null（表示要清掉原有规则）。 */
+    fun buildRule(original: RecurrenceRuleEntity?, eventId: String): RecurrenceRuleEntity? {
+        if (repeatMode == RepeatMode.NONE) return null
+
+        val days = if (repeatMode == RepeatMode.WEEKLY) {
+            // 一天都没选时按行程开始那天重复，避免存出一条谁也不会触发的规则。
+            repeatDays.ifEmpty { setOf(startDate.dayOfWeek) }
+        } else {
+            emptySet()
+        }
+        val useEndDate =
+            repeatEndType == RecurrenceRuleEntity.END_TYPE_ON_DATE && repeatEndDate != null
+
+        return RecurrenceRuleEntity(
+            id = original?.id ?: UUID.randomUUID().toString(),
+            eventId = eventId,
+            frequency = if (repeatMode == RepeatMode.DAILY) {
+                RecurrenceRuleEntity.FREQUENCY_DAILY
+            } else {
+                RecurrenceRuleEntity.FREQUENCY_WEEKLY
+            },
+            interval = 1,
+            byDay = if (days.isEmpty()) null else DayOfWeekCodes.format(days),
+            endType = if (useEndDate) {
+                RecurrenceRuleEntity.END_TYPE_ON_DATE
+            } else {
+                RecurrenceRuleEntity.END_TYPE_NEVER
+            },
+            endEpochDay = if (useEndDate) repeatEndDate?.toEpochDay() else null,
+        )
+    }
+
     fun save() {
         val loaded = detail ?: return
         if (title.isBlank()) {
@@ -165,7 +222,7 @@ fun EventEditScreen(
             val reminders = reminderMinutes
                 ?.let { listOf(ReminderPlanner.create(updated, it)) }
                 .orEmpty()
-            service.save(EventSaveBundle(updated, loaded.rule, reminders))
+            service.save(EventSaveBundle(updated, buildRule(loaded.rule, updated.id), reminders))
             saving = false
             onSaved()
         }
@@ -287,6 +344,86 @@ fun EventEditScreen(
             }
         }
 
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "重复",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RepeatMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = repeatMode == mode,
+                            onClick = { repeatMode = mode },
+                            label = { Text(mode.label) },
+                        )
+                    }
+                }
+
+                if (repeatMode == RepeatMode.WEEKLY) {
+                    Text(
+                        text = "每周的哪几天",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        DayOfWeek.entries.forEach { day ->
+                            val picked = day in repeatDays
+                            FilterChip(
+                                selected = picked,
+                                onClick = {
+                                    repeatDays = if (picked) repeatDays - day else repeatDays + day
+                                },
+                                label = { Text(DayOfWeekCodes.label(day)) },
+                            )
+                        }
+                    }
+                    if (repeatDays.isEmpty()) {
+                        Text(
+                            text = "一天都没选时，会按行程开始那天重复。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                if (repeatMode != RepeatMode.NONE) {
+                    Text(
+                        text = "结束方式",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = repeatEndType == RecurrenceRuleEntity.END_TYPE_NEVER,
+                            onClick = { repeatEndType = RecurrenceRuleEntity.END_TYPE_NEVER },
+                            label = { Text("永不结束") },
+                        )
+                        FilterChip(
+                            selected = repeatEndType == RecurrenceRuleEntity.END_TYPE_ON_DATE,
+                            onClick = {
+                                repeatEndType = RecurrenceRuleEntity.END_TYPE_ON_DATE
+                                if (repeatEndDate == null) repeatEndDate = startDate
+                            },
+                            label = { Text("指定日期") },
+                        )
+                    }
+                    if (repeatEndType == RecurrenceRuleEntity.END_TYPE_ON_DATE) {
+                        OutlinedButton(onClick = { dateTarget = TimeField.REPEAT_END }) {
+                            Text(repeatEndDate?.let(EventFormat::fullDate) ?: "选择结束日期")
+                        }
+                    }
+                }
+            }
+        }
+
         errorText?.let { message ->
             Card(
                 colors = CardDefaults.cardColors(
@@ -313,7 +450,11 @@ fun EventEditScreen(
 
     dateTarget?.let { target ->
         key(target) {
-            val initial = if (target == TimeField.START) startDate else endDate
+            val initial = when (target) {
+                TimeField.START -> startDate
+                TimeField.END -> endDate
+                TimeField.REPEAT_END -> repeatEndDate ?: startDate
+            }
             val state = rememberDatePickerState(
                 initialSelectedDateMillis = initial.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
             )
@@ -324,12 +465,14 @@ fun EventEditScreen(
                         onClick = {
                             state.selectedDateMillis?.let { millis ->
                                 val picked = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
-                                if (target == TimeField.START) {
-                                    // 改开始日期时，结束日期不早于开始日期。
-                                    if (endDate.isBefore(picked)) endDate = picked
-                                    startDate = picked
-                                } else {
-                                    endDate = picked
+                                when (target) {
+                                    TimeField.START -> {
+                                        // 改开始日期时，结束日期不早于开始日期。
+                                        if (endDate.isBefore(picked)) endDate = picked
+                                        startDate = picked
+                                    }
+                                    TimeField.END -> endDate = picked
+                                    TimeField.REPEAT_END -> repeatEndDate = picked
                                 }
                             }
                             dateTarget = null
@@ -393,7 +536,11 @@ fun EventEditScreen(
                                     } else {
                                         LocalTime.of(state.hour, state.minute)
                                     }
-                                    if (target == TimeField.START) startTime = picked else endTime = picked
+                                    when (target) {
+                                        TimeField.START -> startTime = picked
+                                        TimeField.END -> endTime = picked
+                                        TimeField.REPEAT_END -> Unit
+                                    }
                                     timeTarget = null
                                 }
                             ) {

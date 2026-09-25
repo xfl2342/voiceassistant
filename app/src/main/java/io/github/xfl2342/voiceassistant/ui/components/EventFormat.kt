@@ -40,14 +40,21 @@ object EventFormat {
     }
 
     /** 重复规则的中文描述，没有规则时返回 null。 */
-    fun recurrenceDescription(rule: RecurrenceRuleEntity?): String? = when (rule?.frequency) {
-        null -> null
-        RecurrenceRuleEntity.FREQUENCY_DAILY -> "每天"
-        RecurrenceRuleEntity.FREQUENCY_WEEKLY -> {
-            val days = DayOfWeekCodes.parse(rule.byDay)
-            if (days.isEmpty()) "每周" else "每周 " + DayOfWeekCodes.labels(days)
+    fun recurrenceDescription(rule: RecurrenceRuleEntity?): String? {
+        if (rule == null) return null
+        val base = when (rule.frequency) {
+            RecurrenceRuleEntity.FREQUENCY_DAILY -> "每天"
+            RecurrenceRuleEntity.FREQUENCY_WEEKLY -> {
+                val days = DayOfWeekCodes.parse(rule.byDay)
+                if (days.isEmpty()) "每周" else "每周 " + DayOfWeekCodes.labels(days)
+            }
+            else -> return null
         }
-        else -> null
+        val end = rule.endEpochDay
+            ?.takeIf { rule.endType == RecurrenceRuleEntity.END_TYPE_ON_DATE }
+            ?.let { "（至 ${fullDate(LocalDate.ofEpochDay(it))}）" }
+            .orEmpty()
+        return base + end
     }
 
     /** 提醒的中文描述。 */
