@@ -21,22 +21,33 @@ object ReminderPlanner {
 
     /** 计算的基准时刻：定时行程用开始时间，全天行程用当天早上九点。 */
     fun anchorOf(event: EventEntity, zone: ZoneId): Instant = when {
-        event.allDay -> LocalDate.ofEpochDay(event.startEpochDay ?: 0)
-            .atTime(allDayAnchor)
-            .atZone(zone)
-            .toInstant()
+        event.allDay -> anchorOfDay(LocalDate.ofEpochDay(event.startEpochDay ?: 0), zone)
         else -> Instant.ofEpochMilli(event.startAt ?: 0)
     }
 
+    /** 全天行程在某一天的基准时刻：当天早上九点。 */
+    fun anchorOfDay(date: LocalDate, zone: ZoneId): Instant =
+        date.atTime(allDayAnchor).atZone(zone).toInstant()
+
     /** 生成一条「提前 minutesBefore 分钟」的提醒。 */
-    fun create(event: EventEntity, minutesBefore: Int): ReminderEntity {
-        val zone = runCatching { ZoneId.of(event.timeZone) }.getOrDefault(ZoneId.of(EventEntity.DEFAULT_TIME_ZONE))
-        return ReminderEntity(
-            id = UUID.randomUUID().toString(),
+    fun create(event: EventEntity, minutesBefore: Int): ReminderEntity =
+        createAt(
             eventId = event.id,
+            anchor = anchorOf(
+                event,
+                runCatching { ZoneId.of(event.timeZone) }
+                    .getOrDefault(ZoneId.of(EventEntity.DEFAULT_TIME_ZONE)),
+            ),
+            minutesBefore = minutesBefore,
+        )
+
+    /** 按给定的基准时刻生成提醒。重复行程的每一次发生都各生成一条。 */
+    fun createAt(eventId: String, anchor: Instant, minutesBefore: Int): ReminderEntity =
+        ReminderEntity(
+            id = UUID.randomUUID().toString(),
+            eventId = eventId,
             triggerType = ReminderEntity.TYPE_BEFORE,
             minutesBefore = minutesBefore,
-            triggerAt = anchorOf(event, zone).minusSeconds(minutesBefore * 60L).toEpochMilli(),
+            triggerAt = anchor.minusSeconds(minutesBefore * 60L).toEpochMilli(),
         )
-    }
 }

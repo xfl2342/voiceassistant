@@ -5,6 +5,7 @@ import io.github.xfl2342.voiceassistant.data.EventRepository
 import io.github.xfl2342.voiceassistant.data.SettingsStore
 import io.github.xfl2342.voiceassistant.data.db.AppDatabase
 import io.github.xfl2342.voiceassistant.domain.EventService
+import io.github.xfl2342.voiceassistant.domain.ReminderSync
 import io.github.xfl2342.voiceassistant.reminder.ReminderScheduler
 
 /**
@@ -25,5 +26,11 @@ class AppGraph(context: Context) {
 
     val reminderScheduler: ReminderScheduler by lazy { ReminderScheduler(appContext) }
 
-    val eventService: EventService by lazy { EventService(eventRepository, reminderScheduler) }
+    val reminderSync: ReminderSync by lazy {
+        ReminderSync(eventRepository, reminderScheduler, settingsStore)
+    }
+
+    val eventService: EventService by lazy {
+        EventService(eventRepository, reminderSync, reminderScheduler)
+    }
 }

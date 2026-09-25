@@ -63,6 +63,7 @@ fun CalendarScreen(
     onEventClick: (String) -> Unit,
     onOpenReminderSettings: () -> Unit,
     onOpenSettings: () -> Unit,
+    onCreateClick: (LocalDate) -> Unit,
     weekStartDay: DayOfWeek,
     modifier: Modifier = Modifier,
 ) {
@@ -130,6 +131,7 @@ fun CalendarScreen(
                 day = selectedDay,
                 occurrences = occurrencesByDate[selectedDay].orEmpty(),
                 onEventClick = onEventClick,
+                onCreateClick = onCreateClick,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -295,6 +297,7 @@ private fun DayAgenda(
     day: LocalDate,
     occurrences: List<EventOccurrence>,
     onEventClick: (String) -> Unit,
+    onCreateClick: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -304,11 +307,15 @@ private fun DayAgenda(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = "${dayTitleFormatter.format(day)} ${weekdayLabel(day.dayOfWeek)}",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "${dayTitleFormatter.format(day)} ${weekdayLabel(day.dayOfWeek)}",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            TextButton(onClick = { onCreateClick(day) }) { Text("＋ 新建") }
+        }
 
         if (occurrences.isEmpty()) {
             Text(

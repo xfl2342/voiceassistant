@@ -105,11 +105,18 @@ fun EventDetailScreen(
                 if (current.reminders.isEmpty()) {
                     InfoRow("提醒", "不提醒")
                 } else {
+                    val times = current.reminders.mapNotNull { it.minutesBefore }.joinToString("、") {
+                        EventFormat.reminderDescription(it)
+                    }
                     InfoRow(
                         label = "提醒",
-                        value = current.reminders
-                            .mapNotNull { it.minutesBefore }
-                            .joinToString("、") { EventFormat.reminderDescription(it) },
+                        value = if (current.rule != null) {
+                            // 重复行程会预注册未来多次发生，这里把次数说清楚，
+                            // 免得看到「提醒 15 分钟」却以为是只提醒一次。
+                            "$times（已为未来 ${current.reminders.size} 次发生注册）"
+                        } else {
+                            times
+                        },
                     )
                 }
             }

@@ -19,6 +19,7 @@ import io.github.xfl2342.voiceassistant.ui.record.RecordScreen
 import io.github.xfl2342.voiceassistant.ui.settings.ReminderSettingsScreen
 import io.github.xfl2342.voiceassistant.ui.settings.SettingsScreen
 import io.github.xfl2342.voiceassistant.ui.theme.VoiceAssistantTheme
+import java.time.LocalDate
 
 /** 当前显示的页面。页面不多，用状态切换就够了。 */
 private sealed interface AppScreen {
@@ -26,6 +27,7 @@ private sealed interface AppScreen {
     data object Record : AppScreen
     data class Detail(val eventId: String) : AppScreen
     data class Edit(val eventId: String) : AppScreen
+    data class Create(val date: LocalDate) : AppScreen
     data object Settings : AppScreen
     /** 提醒设置：可能从日历的提示条进来，也可能从设置进来，返回时回到来的地方。 */
     data class ReminderSettings(val fromSettings: Boolean = false) : AppScreen
@@ -59,6 +61,7 @@ fun AppRoot(graph: AppGraph) {
                     onEventClick = { screen = AppScreen.Detail(it) },
                     onOpenReminderSettings = { screen = AppScreen.ReminderSettings() },
                     onOpenSettings = { screen = AppScreen.Settings },
+                    onCreateClick = { screen = AppScreen.Create(it) },
                     weekStartDay = weekStartDay,
                     modifier = padded,
                 )
@@ -84,8 +87,19 @@ fun AppRoot(graph: AppGraph) {
                     service = graph.eventService,
                     settingsStore = graph.settingsStore,
                     eventId = current.eventId,
+                    initialDate = null,
                     onBack = { screen = AppScreen.Detail(current.eventId) },
                     onSaved = { screen = AppScreen.Detail(current.eventId) },
+                    modifier = padded,
+                )
+
+                is AppScreen.Create -> EventEditScreen(
+                    service = graph.eventService,
+                    settingsStore = graph.settingsStore,
+                    eventId = null,
+                    initialDate = current.date,
+                    onBack = { screen = AppScreen.Calendar },
+                    onSaved = { screen = AppScreen.Calendar },
                     modifier = padded,
                 )
 

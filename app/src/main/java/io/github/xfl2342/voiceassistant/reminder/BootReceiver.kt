@@ -25,7 +25,11 @@ class BootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                ReminderScheduler(appContext).rescheduleAll()
+                // 重新算一遍未来 30 天的提醒：既恢复开机后丢失的闹钟，
+                // 顺便把重复行程的续期窗口往前推。
+                io.github.xfl2342.voiceassistant.AppGraph(appContext)
+                    .eventService
+                    .refreshAllReminders()
             } finally {
                 pendingResult.finish()
             }

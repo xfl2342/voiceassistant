@@ -73,6 +73,14 @@ class EventRepository(private val database: AppDatabase) {
     suspend fun remindersOf(eventId: String): List<ReminderEntity> =
         reminderDao.findByEventId(eventId)
 
+    /** 用一批新的提醒替换某条行程原有的提醒。 */
+    suspend fun replaceReminders(eventId: String, reminders: List<ReminderEntity>) {
+        database.withTransaction {
+            reminderDao.deleteByEventId(eventId)
+            if (reminders.isNotEmpty()) reminderDao.upsertAll(reminders)
+        }
+    }
+
     suspend fun readyRules(): Map<String, RecurrenceRuleEntity> =
         ruleDao.loadAll().associateBy { it.eventId }
 

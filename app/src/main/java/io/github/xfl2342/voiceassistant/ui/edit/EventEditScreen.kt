@@ -74,6 +74,10 @@ private enum class RepeatMode(val label: String) {
     WEEKLY("每周"),
 }
 
+/** 新建行程时的默认开始时间：下一个整点；太晚了就默认早上九点。 */
+private fun defaultStartTime(now: LocalTime): LocalTime =
+    if (now.hour >= 22) LocalTime.of(9, 0) else LocalTime.of(now.hour + 1, 0)
+
 /**
  * 编辑已有行程。
  *
@@ -84,7 +88,10 @@ private enum class RepeatMode(val label: String) {
 fun EventEditScreen(
     service: EventService,
     settingsStore: SettingsStore,
-    eventId: String,
+    /** 传入行程 id 表示编辑；传 null 表示新建。 */
+    eventId: String?,
+    /** 新建时的默认日期。 */
+    initialDate: LocalDate? = null,
     onBack: () -> Unit,
     onSaved: () -> Unit,
     modifier: Modifier = Modifier,
@@ -93,7 +100,8 @@ fun EventEditScreen(
     val scope = rememberCoroutineScope()
     val timeInputMode = remember { settingsStore.timeInputMode }
 
-    var detail by remember { mutableStateOf<EventDetail?>(null) }
+    var original by remember { mutableStateOf<EventDetail?>(null) }
+    var ready by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
     var allDay by remember { mutableStateOf(false) }
     var startDate by remember { mutableStateOf(LocalDate.now(zone)) }
@@ -112,8 +120,21 @@ fun EventEditScreen(
     var timeTarget by remember { mutableStateOf<TimeField?>(null) }
 
     LaunchedEffect(eventId) {
+        if (eventId == null) {
+            // 新建：给一组合理的默认值（今天/选中日的下一个整点，一小时时长），
+            // 用户往往只需要改个标题。
+            val date = initialDate ?: LocalDate.now(zone)
+            startDate = date
+            endDate = date
+            startTime = defaultStartTime(LocalTime.now(zone))
+            endTime = startTime.plusHours(1)
+            reminderMinutes = ReminderPreset.URGENT.minutesBefore
+            ready = true
+            return@LaunchedEffect
+        }
+
         val loaded = service.load(eventId) ?: return@LaunchedEffect
-        detail = loaded
+        original = loaded
         val event = loaded.event
         title = event.title
         allDay = event.allDay
@@ -141,14 +162,23 @@ fun EventEditScreen(
             repeatEndType = rule.endType
             repeatEndDate = rule.endEpochDay?.let(LocalDate::ofEpochDay)
         }
+        ready = true
     }
 
     BackHandler(onBack = onBack)
 
-    fun buildUpdatedEvent(original: EventEntity): EventEntity {
+    fun buildEvent(originalEntity: EventEntity?): EventEntity {
         val now = System.currentTimeMillis()
+        val base = originalEntity ?: EventEntity(
+            id = UUID.randomUUID().toString(),
+            title = "",
+            allDay = false,
+            timeZone = zone.id,
+            createdAt = now,
+            updatedAt = now,
+        )
         return if (allDay) {
-            original.copy(
+            base.copy(
                 title = title.trim(),
                 allDay = true,
                 startAt = null,
@@ -163,7 +193,7 @@ fun EventEditScreen(
             var end = LocalDateTime.of(endDate, endTime).atZone(zone).toInstant()
             // 结束时间早于开始时间时，按一小时处理，避免存进一条负数时长的行程。
             if (end.isBefore(start)) end = start.plusSeconds(3600)
-            original.copy(
+            base.copy(
                 title = title.trim(),
                 allDay = false,
                 startAt = start.toEpochMilli(),
@@ -209,7 +239,6 @@ fun EventEditScreen(
     }
 
     fun save() {
-        val loaded = detail ?: return
         if (title.isBlank()) {
             errorText = "标题不能为空"
             return
@@ -218,11 +247,11 @@ fun EventEditScreen(
         errorText = null
 
         scope.launch {
-            val updated = buildUpdatedEvent(loaded.event)
+            val updated = buildEvent(original?.event)
             val reminders = reminderMinutes
                 ?.let { listOf(ReminderPlanner.create(updated, it)) }
                 .orEmpty()
-            service.save(EventSaveBundle(updated, buildRule(loaded.rule, updated.id), reminders))
+            service.save(EventSaveBundle(updated, buildRule(original?.rule, updated.id), reminders))
             saving = false
             onSaved()
         }
@@ -238,13 +267,13 @@ fun EventEditScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ 返回") }
             Text(
-                text = "编辑行程",
+                text = if (eventId == null) "新建行程" else "编辑行程",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
         }
 
-        if (detail == null) {
+        if (!ready) {
             Text("正在读取…", style = MaterialTheme.typography.bodyMedium)
             return@Column
         }
