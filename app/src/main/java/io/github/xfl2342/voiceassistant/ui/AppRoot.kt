@@ -15,6 +15,7 @@ import io.github.xfl2342.voiceassistant.data.ThemeMode
 import io.github.xfl2342.voiceassistant.ui.calendar.CalendarScreen
 import io.github.xfl2342.voiceassistant.ui.detail.EventDetailScreen
 import io.github.xfl2342.voiceassistant.ui.edit.EventEditScreen
+import io.github.xfl2342.voiceassistant.ui.list.EventListScreen
 import io.github.xfl2342.voiceassistant.ui.record.RecordScreen
 import io.github.xfl2342.voiceassistant.ui.settings.ReminderSettingsScreen
 import io.github.xfl2342.voiceassistant.ui.settings.SettingsScreen
@@ -28,6 +29,7 @@ private sealed interface AppScreen {
     data class Detail(val eventId: String) : AppScreen
     data class Edit(val eventId: String) : AppScreen
     data class Create(val date: LocalDate) : AppScreen
+    data object EventList : AppScreen
     data object Settings : AppScreen
     /** 提醒设置：可能从日历的提示条进来，也可能从设置进来，返回时回到来的地方。 */
     data class ReminderSettings(val fromSettings: Boolean = false) : AppScreen
@@ -62,6 +64,7 @@ fun AppRoot(graph: AppGraph) {
                     onOpenReminderSettings = { screen = AppScreen.ReminderSettings() },
                     onOpenSettings = { screen = AppScreen.Settings },
                     onCreateClick = { screen = AppScreen.Create(it) },
+                    onOpenList = { screen = AppScreen.EventList },
                     weekStartDay = weekStartDay,
                     modifier = padded,
                 )
@@ -100,6 +103,13 @@ fun AppRoot(graph: AppGraph) {
                     initialDate = current.date,
                     onBack = { screen = AppScreen.Calendar },
                     onSaved = { screen = AppScreen.Calendar },
+                    modifier = padded,
+                )
+
+                AppScreen.EventList -> EventListScreen(
+                    repository = graph.eventRepository,
+                    onBack = { screen = AppScreen.Calendar },
+                    onEventClick = { screen = AppScreen.Detail(it) },
                     modifier = padded,
                 )
 
