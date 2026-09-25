@@ -14,6 +14,13 @@ data class CalendarData(
     val rules: List<RecurrenceRuleEntity>,
 )
 
+/** 一条行程的完整信息，详情页与编辑页使用。 */
+data class EventDetail(
+    val event: EventEntity,
+    val rule: RecurrenceRuleEntity?,
+    val reminders: List<ReminderEntity>,
+)
+
 /**
  * 行程数据的统一入口。
  *
@@ -48,6 +55,16 @@ class EventRepository(private val database: AppDatabase) {
     }
 
     suspend fun findById(id: String): EventEntity? = eventDao.findById(id)
+
+    /** 取出一条行程的完整信息（含重复规则与提醒）。 */
+    suspend fun loadDetail(eventId: String): EventDetail? {
+        val event = eventDao.findById(eventId) ?: return null
+        return EventDetail(
+            event = event,
+            rule = ruleDao.findByEventId(eventId),
+            reminders = reminderDao.findByEventId(eventId),
+        )
+    }
 
     suspend fun loadEvents(): List<EventEntity> = eventDao.loadAll()
 

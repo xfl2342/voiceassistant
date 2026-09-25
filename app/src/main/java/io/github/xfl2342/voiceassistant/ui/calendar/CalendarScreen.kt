@@ -1,6 +1,7 @@
 package io.github.xfl2342.voiceassistant.ui.calendar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +57,7 @@ private val dayTitleFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("
 fun CalendarScreen(
     repository: EventRepository,
     onRecordClick: () -> Unit,
+    onEventClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var visibleMonth by remember { mutableStateOf(YearMonth.now(zone)) }
@@ -99,6 +101,7 @@ fun CalendarScreen(
             DayAgenda(
                 day = selectedDay,
                 occurrences = occurrencesByDate[selectedDay].orEmpty(),
+                onEventClick = onEventClick,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -259,6 +262,7 @@ private fun DayCell(
 private fun DayAgenda(
     day: LocalDate,
     occurrences: List<EventOccurrence>,
+    onEventClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -284,7 +288,11 @@ private fun DayAgenda(
         }
 
         occurrences.forEach { occurrence ->
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onEventClick(occurrence.eventId) },
+            ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
                         text = occurrence.title,

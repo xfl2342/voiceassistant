@@ -48,11 +48,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import io.github.xfl2342.voiceassistant.ai.DeepSeekClient
 import io.github.xfl2342.voiceassistant.ai.EventDraft
-import io.github.xfl2342.voiceassistant.data.EventRepository
 import io.github.xfl2342.voiceassistant.data.SettingsStore
 import io.github.xfl2342.voiceassistant.domain.EventDraftMapper
+import io.github.xfl2342.voiceassistant.domain.EventService
 import io.github.xfl2342.voiceassistant.domain.ReminderPreset
-import io.github.xfl2342.voiceassistant.reminder.ReminderScheduler
 import io.github.xfl2342.voiceassistant.speech.SpeechEvent
 import io.github.xfl2342.voiceassistant.speech.offline.OfflineSpeechEngine
 import io.github.xfl2342.voiceassistant.ui.components.InfoRow
@@ -68,7 +67,7 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun RecordScreen(
-    repository: EventRepository,
+    service: EventService,
     settingsStore: SettingsStore,
     onSaved: () -> Unit,
     onBack: () -> Unit,
@@ -204,11 +203,8 @@ fun RecordScreen(
                 return@launch
             }
 
-            repository.save(saved.event, saved.rule, saved.reminders)
-
-            // 数据入库之后必须把提醒注册到系统闹钟，否则库里有记录但不会响。
-            val scheduler = ReminderScheduler(context)
-            saved.reminders.forEach { scheduler.schedule(it, saved.event.title) }
+            // 入库 + 注册系统闹钟，两件事在这里一起完成。
+            service.save(saved)
 
             saving = false
             onSaved()

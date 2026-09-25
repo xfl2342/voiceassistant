@@ -4,6 +4,8 @@ import android.content.Context
 import io.github.xfl2342.voiceassistant.data.EventRepository
 import io.github.xfl2342.voiceassistant.data.SettingsStore
 import io.github.xfl2342.voiceassistant.data.db.AppDatabase
+import io.github.xfl2342.voiceassistant.domain.EventService
+import io.github.xfl2342.voiceassistant.reminder.ReminderScheduler
 
 /**
  * 依赖的集中创建处。
@@ -20,4 +22,8 @@ class AppGraph(context: Context) {
     val eventRepository: EventRepository by lazy { EventRepository(database) }
 
     val settingsStore: SettingsStore by lazy { SettingsStore(appContext) }
+
+    val reminderScheduler: ReminderScheduler by lazy { ReminderScheduler(appContext) }
+
+    val eventService: EventService by lazy { EventService(eventRepository, reminderScheduler) }
 }

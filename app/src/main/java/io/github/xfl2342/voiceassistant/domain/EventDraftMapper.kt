@@ -27,9 +27,6 @@ data class EventSaveBundle(
  */
 object EventDraftMapper {
 
-    /** 全天行程没有具体时刻，提醒以当天的这个时间点为锚点往前推算。 */
-    private val allDayReminderAnchor: LocalTime = LocalTime.of(9, 0)
-
     /** 用户只说了开始时间时，默认安排一小时。 */
     private const val DEFAULT_DURATION_MINUTES = 60L
 
@@ -133,30 +130,12 @@ object EventDraftMapper {
     }
 
     private fun buildReminders(draft: EventDraft, event: EventEntity): List<ReminderEntity> {
-        val anchor = reminderAnchor(event, ZoneId.of(event.timeZone))
         val minutesList = draft.reminderMinutes
             .ifEmpty { listOf(ReminderPreset.fromUrgency(draft.urgency).minutesBefore) }
             .filter { it > 0 }
             .distinct()
 
-        return minutesList.map { minutes ->
-            ReminderEntity(
-                id = UUID.randomUUID().toString(),
-                eventId = event.id,
-                triggerType = ReminderEntity.TYPE_BEFORE,
-                minutesBefore = minutes,
-                triggerAt = anchor.minusSeconds(minutes * 60L).toEpochMilli(),
-            )
-        }
-    }
-
-    /** 提醒的基准时刻：定时行程用开始时间，全天行程用当天早上九点。 */
-    private fun reminderAnchor(event: EventEntity, zone: ZoneId): Instant = when {
-        event.allDay -> LocalDate.ofEpochDay(event.startEpochDay ?: 0)
-            .atTime(allDayReminderAnchor)
-            .atZone(zone)
-            .toInstant()
-        else -> Instant.ofEpochMilli(event.startAt ?: 0)
+        return minutesList.map { minutes -> ReminderPlanner.create(event, minutes) }
     }
 
     private fun parseInstant(text: String, zone: ZoneId): Instant? {

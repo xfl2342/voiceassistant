@@ -11,33 +11,62 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import io.github.xfl2342.voiceassistant.AppGraph
 import io.github.xfl2342.voiceassistant.ui.calendar.CalendarScreen
+import io.github.xfl2342.voiceassistant.ui.detail.EventDetailScreen
+import io.github.xfl2342.voiceassistant.ui.edit.EventEditScreen
 import io.github.xfl2342.voiceassistant.ui.record.RecordScreen
 import io.github.xfl2342.voiceassistant.ui.theme.VoiceAssistantTheme
+
+/** 当前显示的页面。页面不多，用状态切换就够了。 */
+private sealed interface AppScreen {
+    data object Calendar : AppScreen
+    data object Record : AppScreen
+    data class Detail(val eventId: String) : AppScreen
+    data class Edit(val eventId: String) : AppScreen
+}
 
 /**
  * 应用根节点。
  *
- * 目前只有两个页面，用状态切换就够了，不引入导航库；页面多起来再换成 Navigation Compose。
+ * 页面还不多，用状态切换就够了，不引入导航库；再复杂就换成 Navigation Compose。
  */
 @Composable
 fun AppRoot(graph: AppGraph) {
-    var showRecordScreen by remember { mutableStateOf(false) }
+    var screen by remember { mutableStateOf<AppScreen>(AppScreen.Calendar) }
 
     VoiceAssistantTheme {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            if (showRecordScreen) {
-                RecordScreen(
+            val padded = Modifier.padding(innerPadding)
+            when (val current = screen) {
+                AppScreen.Calendar -> CalendarScreen(
                     repository = graph.eventRepository,
-                    settingsStore = graph.settingsStore,
-                    onSaved = { showRecordScreen = false },
-                    onBack = { showRecordScreen = false },
-                    modifier = Modifier.padding(innerPadding),
+                    onRecordClick = { screen = AppScreen.Record },
+                    onEventClick = { screen = AppScreen.Detail(it) },
+                    modifier = padded,
                 )
-            } else {
-                CalendarScreen(
-                    repository = graph.eventRepository,
-                    onRecordClick = { showRecordScreen = true },
-                    modifier = Modifier.padding(innerPadding),
+
+                AppScreen.Record -> RecordScreen(
+                    service = graph.eventService,
+                    settingsStore = graph.settingsStore,
+                    onSaved = { screen = AppScreen.Calendar },
+                    onBack = { screen = AppScreen.Calendar },
+                    modifier = padded,
+                )
+
+                is AppScreen.Detail -> EventDetailScreen(
+                    service = graph.eventService,
+                    eventId = current.eventId,
+                    onBack = { screen = AppScreen.Calendar },
+                    onEdit = { screen = AppScreen.Edit(current.eventId) },
+                    onDeleted = { screen = AppScreen.Calendar },
+                    modifier = padded,
+                )
+
+                is AppScreen.Edit -> EventEditScreen(
+                    service = graph.eventService,
+                    eventId = current.eventId,
+                    onBack = { screen = AppScreen.Detail(current.eventId) },
+                    onSaved = { screen = AppScreen.Detail(current.eventId) },
+                    modifier = padded,
                 )
             }
         }
