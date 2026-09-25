@@ -1,0 +1,12 @@
+# 统一换行符，避免 Windows 与 macOS / Linux 之间来回转换造成无意义的改动
+* text=auto eol=lf
+
+# Windows 专用脚本必须用 CRLF，否则可能无法执行
+*.bat text eol=crlf
+gradlew.bat text eol=crlf
+
+# 二进制文件不做换行符处理
+*.jar binary
+*.png binary
+*.webp binary
+*.onnx binary

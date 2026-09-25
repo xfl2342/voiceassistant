@@ -1,0 +1,23 @@
+package io.github.xfl2342.voiceassistant
+
+import android.content.Context
+import io.github.xfl2342.voiceassistant.data.EventRepository
+import io.github.xfl2342.voiceassistant.data.SettingsStore
+import io.github.xfl2342.voiceassistant.data.db.AppDatabase
+
+/**
+ * 依赖的集中创建处。
+ *
+ * 目前只有数据库和设置两项，手动组装就够了，不引入依赖注入框架；
+ * 等对象多起来再考虑换 Hilt 或 Koin 也不迟。
+ */
+class AppGraph(context: Context) {
+
+    private val appContext = context.applicationContext
+
+    val database: AppDatabase by lazy { AppDatabase.get(appContext) }
+
+    val eventRepository: EventRepository by lazy { EventRepository(database) }
+
+    val settingsStore: SettingsStore by lazy { SettingsStore(appContext) }
+}
