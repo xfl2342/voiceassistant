@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    「今天」小组件交给系统的说明书。
+
+    - 默认占 4×3 个格子，横竖都能拉；能放几行是按拉完的高度算的（见 widgetRowBudget）；
+    - updatePeriodMillis 半小时一次：既照顾到「过了零点要换成新的一天」，
+      也不至于为了刷新频繁唤醒系统（行程有改动时会另外立即重画）。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_today_description"
+    android:initialLayout="@layout/widget_today"
+    android:minHeight="110dp"
+    android:minResizeHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minWidth="180dp"
+    android:previewLayout="@layout/widget_today"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="3"
+    android:targetCellWidth="4"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    小组件里的一行行程：左边一根按急迫程度上色的竖条，然后是时间与标题。
+
+    这一份会被「贴一次、复制多份」地放进 widget_today.xml 的行程区里，
+    每一行都是独立的一份，所以点哪一行就能打开哪一条行程。
+    布局里的文字只是给系统预览看的样例，真实数据由代码填进来。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_row_root"
+    android:layout_width="match_parent"
+    android:layout_height="26dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <!--
+        用 ImageView 而不是带背景的 View：小组件只能通过 RemoteViews 那小组
+        官方认可的接口改界面，换图片（setImageViewResource）是其中最稳的一个。
+    -->
+    <ImageView
+        android:id="@+id/widget_row_bar"
+        android:layout_width="4dp"
+        android:layout_height="16dp"
+        android:layout_marginEnd="8dp"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bar_normal" />
+
+    <TextView
+        android:id="@+id/widget_row_time"
+        android:layout_width="46dp"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:text="@string/widget_sample_time"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/widget_row_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="@string/widget_sample_title"
+        android:textColor="@color/widget_text"
+        android:textSize="13sp" />
+</LinearLayout>

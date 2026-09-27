@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 深色模式下的桌面小组件取色。急迫程度那三档不跟着变：颜色本身是信息。 -->
+<resources>
+    <color name="widget_background">#FF1C1B1F</color>
+    <color name="widget_text">#FFE6E1E5</color>
+    <color name="widget_text_secondary">#FFA8A5AC</color>
+    <color name="widget_divider">#FF2E2C31</color>
+    <color name="widget_action_background">#FF3A3146</color>
+    <color name="widget_action_icon">#FFD0BCFF</color>
+</resources>
