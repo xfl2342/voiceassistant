@@ -20,6 +20,10 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE deleted = 0")
     suspend fun loadAll(): List<EventEntity>
 
+    /** 全部行程，含已删除的。恢复时靠它分辨「新的一条」与「删过的一条」。 */
+    @Query("SELECT * FROM events")
+    suspend fun loadAllIncludingDeleted(): List<EventEntity>
+
     @Query("SELECT * FROM events WHERE id = :id")
     suspend fun findById(id: String): EventEntity?
 

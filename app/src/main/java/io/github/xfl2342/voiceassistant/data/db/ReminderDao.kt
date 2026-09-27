@@ -7,6 +7,10 @@ import androidx.room.Upsert
 @Dao
 interface ReminderDao {
 
+    /** 全部提醒。备份要把它们整份带走，所以这里不能只按行程查。 */
+    @Query("SELECT * FROM reminders")
+    suspend fun loadAll(): List<ReminderEntity>
+
     @Query("SELECT * FROM reminders WHERE eventId = :eventId ORDER BY triggerAt")
     suspend fun findByEventId(eventId: String): List<ReminderEntity>
 
