@@ -49,11 +49,16 @@ import androidx.core.content.ContextCompat
 import io.github.xfl2342.voiceassistant.ai.DeepSeekClient
 import io.github.xfl2342.voiceassistant.ai.EventDraft
 import io.github.xfl2342.voiceassistant.data.SettingsStore
+import io.github.xfl2342.voiceassistant.data.db.EventEntity
+import io.github.xfl2342.voiceassistant.domain.ConflictReport
 import io.github.xfl2342.voiceassistant.domain.EventDraftMapper
+import io.github.xfl2342.voiceassistant.domain.EventSaveBundle
 import io.github.xfl2342.voiceassistant.domain.EventService
 import io.github.xfl2342.voiceassistant.domain.ReminderPreset
 import io.github.xfl2342.voiceassistant.speech.SpeechEvent
 import io.github.xfl2342.voiceassistant.speech.offline.OfflineSpeechEngine
+import io.github.xfl2342.voiceassistant.ui.components.ConflictDialog
+import io.github.xfl2342.voiceassistant.ui.components.EventColors
 import io.github.xfl2342.voiceassistant.ui.components.InfoRow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -98,7 +103,10 @@ fun RecordScreen(
     var parsing by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     /** 等待通知权限结果之后再继续保存。 */
-    var pendingSave by remember { mutableStateOf(false) }
+    var waitingPermission by remember { mutableStateOf<EventSaveBundle?>(null) }
+    /** 撞上已有行程时先弹窗问一句，用户确认后再从这里继续保存。 */
+    var conflictReport by remember { mutableStateOf<ConflictReport?>(null) }
+    var waitingConflict by remember { mutableStateOf<EventSaveBundle?>(null) }
     var errorText by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf<EventDraft?>(null) }
 
@@ -185,22 +193,13 @@ fun RecordScreen(
         }
     }
 
-    fun performSave() {
-        val current = draft ?: return
+    fun performSave(bundle: EventSaveBundle) {
         saving = true
         errorText = null
 
         scope.launch {
-            val bundle = EventDraftMapper.toBundle(current, rawText = sentence.trim())
-            val saved = bundle.getOrNull()
-            if (saved == null) {
-                saving = false
-                errorText = "保存失败：" + (bundle.exceptionOrNull()?.message ?: "数据不完整")
-                return@launch
-            }
-
             // 入库 + 注册系统闹钟，两件事在这里一起完成。
-            service.save(saved)
+            service.save(bundle)
 
             saving = false
             onSaved()
@@ -211,25 +210,53 @@ fun RecordScreen(
         ActivityResultContracts.RequestPermission()
     ) { _ ->
         // 即使用户拒绝通知权限，也照样把行程存下来，只是收不到提醒。
-        if (pendingSave) {
-            pendingSave = false
-            performSave()
-        }
+        val bundle = waitingPermission
+        waitingPermission = null
+        if (bundle != null) performSave(bundle)
     }
 
-    fun save() {
-        if (draft == null) return
-
+    fun continueSave(bundle: EventSaveBundle) {
         val needsNotificationPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
 
         if (needsNotificationPermission) {
             // 真正要用到提醒的时候才申请权限，而不是一打开应用就弹窗。
-            pendingSave = true
+            waitingPermission = bundle
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            performSave()
+            performSave(bundle)
+        }
+    }
+
+    /**
+     * 点「保存到日历」之后：先转成实体，再看有没有撞上已有行程。
+     *
+     * 顺序上先查冲突、再申请通知权限，是为了不让两个弹窗叠在一起——
+     * 用户先回答「要不要存」，再回答「要不要允许提醒」。
+     */
+    fun save() {
+        val current = draft ?: return
+        saving = true
+        errorText = null
+
+        scope.launch {
+            val mapped = EventDraftMapper.toBundle(current, rawText = sentence.trim())
+            val bundle = mapped.getOrNull()
+            if (bundle == null) {
+                saving = false
+                errorText = "保存失败：" + (mapped.exceptionOrNull()?.message ?: "数据不完整")
+                return@launch
+            }
+
+            val report = service.findConflicts(bundle.event, bundle.rule)
+            saving = false
+            if (report.hasConflict) {
+                waitingConflict = bundle
+                conflictReport = report
+            } else {
+                continueSave(bundle)
+            }
         }
     }
 
@@ -380,6 +407,10 @@ fun RecordScreen(
                     InfoRow("结束", parsed.end.ifBlank { "（空）" })
                     if (parsed.allDay) InfoRow("类型", "全天")
                     if (parsed.location.isNotBlank()) InfoRow("地点", parsed.location)
+                    InfoRow(
+                        label = "急迫程度",
+                        value = EventColors.label(EventEntity.normalizeUrgency(parsed.urgency)),
+                    )
                     parsed.recurrenceText?.let { InfoRow("重复", it) }
                     InfoRow(
                         label = "提醒",
@@ -403,6 +434,22 @@ fun RecordScreen(
             }
         }
 
+    }
+
+    conflictReport?.let { report ->
+        ConflictDialog(
+            report = report,
+            onSaveAnyway = {
+                val bundle = waitingConflict
+                conflictReport = null
+                waitingConflict = null
+                if (bundle != null) continueSave(bundle)
+            },
+            onBack = {
+                conflictReport = null
+                waitingConflict = null
+            },
+        )
     }
 }
 

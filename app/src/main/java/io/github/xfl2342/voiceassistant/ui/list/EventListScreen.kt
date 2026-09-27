@@ -1,13 +1,19 @@
 package io.github.xfl2342.voiceassistant.ui.list
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -26,6 +32,7 @@ import io.github.xfl2342.voiceassistant.data.CalendarData
 import io.github.xfl2342.voiceassistant.data.EventRepository
 import io.github.xfl2342.voiceassistant.data.db.EventEntity
 import io.github.xfl2342.voiceassistant.data.db.RecurrenceRuleEntity
+import io.github.xfl2342.voiceassistant.ui.components.EventColors
 import io.github.xfl2342.voiceassistant.ui.components.EventFormat
 
 /**
@@ -117,37 +124,46 @@ private fun EventRow(
             .fillMaxWidth()
             .clickable { onClick(event.id) },
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = event.title,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                // 重复行程用一个显眼的标签标出重复周期，这是列表里最需要一眼看到的信息。
-                EventFormat.recurrenceDescription(rule)?.let { repeat ->
-                    Text(
-                        text = repeat,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-            Text(
-                text = EventFormat.timeDescription(event),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            // 与日历用同一套颜色：紧急偏红、常规偏蓝、不急偏灰。
+            Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .fillMaxHeight()
+                    .background(EventColors.accent(event.urgency)),
             )
-            event.location?.takeIf { it.isNotBlank() }?.let { location ->
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = event.title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    // 重复行程用一个显眼的标签标出重复周期，这是列表里最需要一眼看到的信息。
+                    EventFormat.recurrenceDescription(rule)?.let { repeat ->
+                        Text(
+                            text = repeat,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
                 Text(
-                    text = location,
+                    text = EventFormat.timeDescription(event),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                event.location?.takeIf { it.isNotBlank() }?.let { location ->
+                    Text(
+                        text = location,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

@@ -47,11 +47,13 @@ import io.github.xfl2342.voiceassistant.data.SettingsStore
 import io.github.xfl2342.voiceassistant.data.TimeInputMode
 import io.github.xfl2342.voiceassistant.data.db.EventEntity
 import io.github.xfl2342.voiceassistant.data.db.RecurrenceRuleEntity
+import io.github.xfl2342.voiceassistant.domain.ConflictReport
 import io.github.xfl2342.voiceassistant.domain.DayOfWeekCodes
 import io.github.xfl2342.voiceassistant.domain.EventSaveBundle
 import io.github.xfl2342.voiceassistant.domain.EventService
 import io.github.xfl2342.voiceassistant.domain.ReminderPlanner
 import io.github.xfl2342.voiceassistant.domain.ReminderPreset
+import io.github.xfl2342.voiceassistant.ui.components.ConflictDialog
 import io.github.xfl2342.voiceassistant.ui.components.EventFormat
 import io.github.xfl2342.voiceassistant.ui.components.WheelTimePicker
 import kotlinx.coroutines.launch
@@ -72,6 +74,24 @@ private enum class RepeatMode(val label: String) {
     NONE("不重复"),
     DAILY("每天"),
     WEEKLY("每周"),
+}
+
+/**
+ * 急迫程度。
+ *
+ * 只影响日历上的颜色，不代表别的意思：这条行程要紧，就标红；
+ * 不急的标灰，省得一堆琐事把真正要紧的盖住。
+ */
+private enum class Urgency(val value: String, val label: String) {
+    HIGH(EventEntity.URGENCY_HIGH, "紧急"),
+    NORMAL(EventEntity.URGENCY_NORMAL, "常规"),
+    LOW(EventEntity.URGENCY_LOW, "不急"),
+    ;
+
+    companion object {
+        fun from(value: String): Urgency =
+            entries.firstOrNull { it.value == value } ?: NORMAL
+    }
 }
 
 /** 新建行程时的默认开始时间：下一个整点；太晚了就默认早上九点。 */
@@ -110,12 +130,16 @@ fun EventEditScreen(
     var endTime by remember { mutableStateOf(LocalTime.of(10, 0)) }
     var location by remember { mutableStateOf("") }
     var reminderMinutes by remember { mutableStateOf<Int?>(ReminderPreset.NORMAL.minutesBefore) }
+    var urgency by remember { mutableStateOf(Urgency.NORMAL) }
     var repeatMode by remember { mutableStateOf(RepeatMode.NONE) }
     var repeatDays by remember { mutableStateOf<Set<DayOfWeek>>(emptySet()) }
     var repeatEndType by remember { mutableStateOf(RecurrenceRuleEntity.END_TYPE_NEVER) }
     var repeatEndDate by remember { mutableStateOf<LocalDate?>(null) }
     var saving by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    /** 撞上已有行程时先弹窗问一句，用户确认后再落库。 */
+    var conflictReport by remember { mutableStateOf<ConflictReport?>(null) }
+    var waitingConflict by remember { mutableStateOf<Pair<EventEntity, RecurrenceRuleEntity?>?>(null) }
     var dateTarget by remember { mutableStateOf<TimeField?>(null) }
     var timeTarget by remember { mutableStateOf<TimeField?>(null) }
 
@@ -139,6 +163,7 @@ fun EventEditScreen(
         title = event.title
         allDay = event.allDay
         location = event.location.orEmpty()
+        urgency = Urgency.from(event.urgency)
         if (event.allDay) {
             val start = LocalDate.ofEpochDay(event.startEpochDay ?: LocalDate.now(zone).toEpochDay())
             startDate = start
@@ -186,6 +211,7 @@ fun EventEditScreen(
                 startEpochDay = startDate.toEpochDay(),
                 endEpochDay = endDate.toEpochDay().coerceAtLeast(startDate.toEpochDay()),
                 location = location.trim().ifBlank { null },
+                urgency = urgency.value,
                 updatedAt = now,
             )
         } else {
@@ -201,6 +227,7 @@ fun EventEditScreen(
                 startEpochDay = null,
                 endEpochDay = null,
                 location = location.trim().ifBlank { null },
+                urgency = urgency.value,
                 updatedAt = now,
             )
         }
@@ -238,6 +265,16 @@ fun EventEditScreen(
         )
     }
 
+    /** 真正落库：行程、重复规则、提醒一起交给服务层。 */
+    suspend fun persist(event: EventEntity, rule: RecurrenceRuleEntity?) {
+        val reminders = reminderMinutes
+            ?.let { listOf(ReminderPlanner.create(event, it)) }
+            .orEmpty()
+        service.save(EventSaveBundle(event, rule, reminders))
+        saving = false
+        onSaved()
+    }
+
     fun save() {
         if (title.isBlank()) {
             errorText = "标题不能为空"
@@ -248,12 +285,16 @@ fun EventEditScreen(
 
         scope.launch {
             val updated = buildEvent(original?.event)
-            val reminders = reminderMinutes
-                ?.let { listOf(ReminderPlanner.create(updated, it)) }
-                .orEmpty()
-            service.save(EventSaveBundle(updated, buildRule(original?.rule, updated.id), reminders))
-            saving = false
-            onSaved()
+            val rule = buildRule(original?.rule, updated.id)
+            // 先查冲突再落库：用户确认「仍然保存」才真的写进去。
+            val report = service.findConflicts(updated, rule)
+            if (report.hasConflict) {
+                waitingConflict = updated to rule
+                conflictReport = report
+                saving = false
+            } else {
+                persist(updated, rule)
+            }
         }
     }
 
@@ -339,6 +380,36 @@ fun EventEditScreen(
                     label = { Text("地点（可留空）") },
                     singleLine = true,
                 )
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = "急迫程度",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "只影响日历上的颜色：紧急偏红、常规偏蓝、不急偏灰。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Urgency.entries.forEach { option ->
+                        FilterChip(
+                            selected = urgency == option,
+                            onClick = { urgency = option },
+                            label = { Text(option.label) },
+                        )
+                    }
+                }
             }
         }
 
@@ -475,6 +546,26 @@ fun EventEditScreen(
         ) {
             Text(if (saving) "保存中…" else "保存")
         }
+    }
+
+    conflictReport?.let { report ->
+        ConflictDialog(
+            report = report,
+            onSaveAnyway = {
+                val pending = waitingConflict
+                conflictReport = null
+                waitingConflict = null
+                if (pending != null) {
+                    val (event, rule) = pending
+                    saving = true
+                    scope.launch { persist(event, rule) }
+                }
+            },
+            onBack = {
+                conflictReport = null
+                waitingConflict = null
+            },
+        )
     }
 
     dateTarget?.let { target ->

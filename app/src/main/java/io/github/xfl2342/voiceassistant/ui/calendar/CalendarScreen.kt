@@ -5,11 +5,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,6 +41,7 @@ import io.github.xfl2342.voiceassistant.data.EventRepository
 import io.github.xfl2342.voiceassistant.domain.EventOccurrence
 import io.github.xfl2342.voiceassistant.domain.RecurrenceExpander
 import io.github.xfl2342.voiceassistant.reminder.ReminderPermissions
+import io.github.xfl2342.voiceassistant.ui.components.EventColors
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -270,12 +274,12 @@ private fun DayCell(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(4.dp))
+                    // 颜色表示急迫程度（紧急偏红、常规偏蓝、不急偏灰）；
+                    // 深浅区分全天与定时——全天填得更实，一眼能看出它占一整天。
                     .background(
-                        if (occurrence.allDay) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-                        } else {
-                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.18f)
-                        }
+                        EventColors.accent(occurrence.urgency).copy(
+                            alpha = if (occurrence.allDay) 0.32f else 0.16f,
+                        ),
                     )
                     .padding(horizontal = 3.dp, vertical = 1.dp),
                 style = MaterialTheme.typography.labelSmall,
@@ -336,22 +340,31 @@ private fun DayAgenda(
                     .fillMaxWidth()
                     .clickable { onEventClick(occurrence.eventId) },
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = occurrence.title,
-                        style = MaterialTheme.typography.bodyLarge,
+                Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                    // 左侧色条：这条行程有多急，一眼能扫出来。
+                    Box(
+                        modifier = Modifier
+                            .width(5.dp)
+                            .fillMaxHeight()
+                            .background(EventColors.accent(occurrence.urgency)),
                     )
-                    Text(
-                        text = occurrenceTimeText(occurrence),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    occurrence.location?.takeIf { it.isNotBlank() }?.let { location ->
+                    Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = location,
+                            text = occurrence.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = occurrenceTimeText(occurrence),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        occurrence.location?.takeIf { it.isNotBlank() }?.let { location ->
+                            Text(
+                                text = location,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

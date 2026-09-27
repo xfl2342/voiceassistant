@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
@@ -48,13 +50,16 @@ import java.time.DayOfWeek
  * 设置中心。
  *
  * 所有可以调的东西都集中到这里，主界面只保留「用」相关的操作。
- * 目前有「选择时间的方式」与「提醒设置」，后续的设置项也加在这里。
+ * 目前有 DeepSeek、语音模型、时间选择方式、每周起始日、深色模式、改进意见、提醒设置
+ * 与数据备份，后续的设置项也加在这里。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     settingsStore: SettingsStore,
     onBack: () -> Unit,
+    onOpenFeedback: () -> Unit,
+    onOpenBackup: () -> Unit,
     onOpenReminderSettings: () -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
     onWeekStartChange: (DayOfWeek) -> Unit,
@@ -66,6 +71,8 @@ fun SettingsScreen(
     var apiKey by remember { mutableStateOf(settingsStore.deepSeekApiKey.orEmpty()) }
     var deepSeekModel by remember { mutableStateOf(settingsStore.deepSeekModel) }
     var showKey by remember { mutableStateOf(false) }
+    /** 「清除 Key」的二次确认：删掉容易，重新填一次要翻半天，所以问一句。 */
+    var confirmClearKey by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val installer = remember { ModelInstaller(context) }
 
@@ -102,7 +109,9 @@ fun SettingsScreen(
                     onValueChange = {
                         apiKey = it
                         // 边输边存，免得改完忘了保存。
-                        settingsStore.deepSeekApiKey = it
+                        // 但清空输入框不算「清除」——误删一段文字就把 Key 弄丢太容易了，
+                        // 真要清除请用下面的「清除 Key」，那里会再问一次。
+                        if (it.isNotBlank()) settingsStore.deepSeekApiKey = it
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("API Key") },
@@ -134,11 +143,15 @@ fun SettingsScreen(
                     }
                     FilterChip(
                         selected = false,
-                        onClick = {
-                            apiKey = ""
-                            settingsStore.deepSeekApiKey = null
-                        },
+                        onClick = { confirmClearKey = true },
                         label = { Text("清除 Key") },
+                    )
+                }
+                if (apiKey.isBlank() && settingsStore.hasApiKey) {
+                    Text(
+                        text = "输入框空着不影响已保存的 Key；要真的清除，请点上面的「清除 Key」。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(
@@ -250,6 +263,28 @@ fun SettingsScreen(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable { onOpenFeedback() },
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "改进意见",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "用着哪里别扭就随口记一句；攒够了连上电脑，一次改掉",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
                 .clickable { onOpenReminderSettings() },
         ) {
             Column(
@@ -268,6 +303,58 @@ fun SettingsScreen(
                 )
             }
         }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenBackup() },
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "数据备份",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "把行程、提醒与改进意见导成一份文件，存到下载目录或别处；不含 API Key",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    if (confirmClearKey) {
+        AlertDialog(
+            onDismissRequest = { confirmClearKey = false },
+            title = { Text("清除 API Key？") },
+            text = {
+                Text(
+                    "清除后 AI 解析就用不了了，需要重新填一次 Key 才能继续用语音记行程。" +
+                        "已经记下的行程不受影响。"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClearKey = false
+                        apiKey = ""
+                        settingsStore.deepSeekApiKey = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Text("清除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearKey = false }) { Text("取消") }
+            },
+        )
     }
 }
 

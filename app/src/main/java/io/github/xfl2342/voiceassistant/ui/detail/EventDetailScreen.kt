@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.xfl2342.voiceassistant.data.EventDetail
 import io.github.xfl2342.voiceassistant.domain.EventService
+import io.github.xfl2342.voiceassistant.ui.components.EventColors
 import io.github.xfl2342.voiceassistant.ui.components.EventFormat
 import io.github.xfl2342.voiceassistant.ui.components.InfoRow
 import kotlinx.coroutines.launch
@@ -96,6 +97,7 @@ fun EventDetailScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
                 InfoRow("时间", EventFormat.timeDescription(current.event))
+                InfoRow("急迫程度", EventColors.label(current.event.urgency))
                 EventFormat.recurrenceDescription(current.rule)?.let {
                     InfoRow("重复", it)
                 }
