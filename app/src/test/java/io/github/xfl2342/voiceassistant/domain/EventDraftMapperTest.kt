@@ -170,6 +170,35 @@ class EventDraftMapperTest {
     }
 
     @Test
+    fun `急迫程度会跟着行程一起存下来`() {
+        val draft = draft(
+            title = "临时会议",
+            start = "2026-09-26T15:00:00+08:00",
+            end = "",
+            urgency = "high",
+        )
+
+        val bundle = EventDraftMapper.toBundle(draft, null, zone).getOrThrow()
+
+        assertEquals("high", bundle.event.urgency)
+    }
+
+    @Test
+    fun `模型给了认不出的急迫程度时按常规处理`() {
+        val draft = draft(
+            title = "收拾桌子",
+            start = "2026-09-26T15:00:00+08:00",
+            end = "",
+            urgency = "非常急",
+        )
+
+        assertEquals(
+            "normal",
+            EventDraftMapper.toBundle(draft, null, zone).getOrThrow().event.urgency,
+        )
+    }
+
+    @Test
     fun `时间看不懂时保存失败而不是写入脏数据`() {
         val draft = draft(title = "开会", start = "下周找个时间", end = "")
 

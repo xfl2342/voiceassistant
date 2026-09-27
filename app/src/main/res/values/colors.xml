@@ -7,4 +7,21 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- 桌面小组件（浅色）。深色一套在 values-night/colors.xml 里。 -->
+    <color name="widget_background">#FFFFFFFF</color>
+    <color name="widget_text">#FF1C1B1F</color>
+    <color name="widget_text_secondary">#FF5F6368</color>
+    <color name="widget_divider">#FFE3E1E6</color>
+    <color name="widget_action_background">#FFEDE7F6</color>
+    <color name="widget_action_icon">#FF6650A4</color>
+
+    <!--
+        行程急迫程度的三档配色。与 Compose 那边 ui/theme/Color.kt 里的
+        UrgencyHigh / UrgencyNormal / UrgencyLow 是同一组值：小组件走的是
+        布局文件，拿不到 Compose 的颜色对象，只能再写一份。
+    -->
+    <color name="urgency_high">#FFE53935</color>
+    <color name="urgency_normal">#FF1E88E5</color>
+    <color name="urgency_low">#FF9E9E9E</color>
 </resources>

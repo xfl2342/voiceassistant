@@ -2,6 +2,7 @@ package io.github.xfl2342.voiceassistant.domain
 
 import java.time.Instant
 import java.time.LocalDate
+import io.github.xfl2342.voiceassistant.data.db.EventEntity
 
 /**
  * 展开之后的一次「发生」。
@@ -19,6 +20,8 @@ data class EventOccurrence(
     val startAt: Instant?,
     val endAt: Instant?,
     val location: String?,
+    /** 急迫程度（high / normal / low），日历按它给行程上色。 */
+    val urgency: String = EventEntity.URGENCY_NORMAL,
     /** 来自重复规则时为规则 id，单次行程为 null。 */
     val recurrenceRuleId: String? = null,
 ) {

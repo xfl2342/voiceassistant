@@ -242,6 +242,25 @@ class RecurrenceExpanderTest {
         assertTrue(result.any { it.date == sunday })
     }
 
+    @Test
+    fun `展开出来的每一次发生都带着行程的急迫程度`() {
+        // 日历是给每一次发生上色的，所以这个字段必须逐条带过去。
+        val monday = LocalDate.of(2026, 9, 7)
+        val event = timedEvent(at(monday, 8), at(monday, 9)).copy(
+            urgency = EventEntity.URGENCY_HIGH,
+        )
+        val rule = rule(
+            event.id,
+            RecurrenceRuleEntity.FREQUENCY_WEEKLY,
+            byDay = "MO,WE",
+        )
+
+        val result = expand(listOf(event), listOf(rule), monday, monday.plusDays(6))
+
+        assertEquals(2, result.size)
+        assertTrue(result.all { it.urgency == EventEntity.URGENCY_HIGH })
+    }
+
     private fun expand(
         events: List<EventEntity>,
         rules: List<RecurrenceRuleEntity>,

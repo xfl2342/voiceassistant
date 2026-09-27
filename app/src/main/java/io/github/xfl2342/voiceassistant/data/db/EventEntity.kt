@@ -1,5 +1,6 @@
 package io.github.xfl2342.voiceassistant.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -44,6 +45,17 @@ data class EventEntity(
     val location: String? = null,
     val notes: String? = null,
 
+    /**
+     * 急迫程度：high / normal / low。
+     *
+     * 与提醒的提前量是两件事：这一项说的是「这件事多要紧」（决定日历上的颜色），
+     * 提醒说的是「提前多久通知你」。AI 解析时会给出这一项，手动录入时自己选。
+     */
+    // 这里的默认值必须与 v2 → v3 迁移里那句 ALTER TABLE 完全一致，
+    // 否则全新安装与升级安装会得到两份不同的表结构，Room 会在打开数据库时报错。
+    @ColumnInfo(defaultValue = "normal")
+    val urgency: String = URGENCY_NORMAL,
+
     /** 用户的原话，保留下来便于日后回溯解析是否出错。 */
     val rawText: String? = null,
 
@@ -55,5 +67,16 @@ data class EventEntity(
 ) {
     companion object {
         const val DEFAULT_TIME_ZONE = "Asia/Shanghai"
+
+        const val URGENCY_HIGH = "high"
+        const val URGENCY_NORMAL = "normal"
+        const val URGENCY_LOW = "low"
+
+        /** 把模型或界面传来的写法规整到三档，认不出来的一律按「常规」。 */
+        fun normalizeUrgency(value: String?): String = when (value?.trim()?.lowercase()) {
+            URGENCY_HIGH -> URGENCY_HIGH
+            URGENCY_LOW -> URGENCY_LOW
+            else -> URGENCY_NORMAL
+        }
     }
 }

@@ -98,6 +98,7 @@ object RecurrenceExpander {
                     startAt = null,
                     endAt = null,
                     location = event.location,
+                    urgency = event.urgency,
                     recurrenceRuleId = rule?.id,
                 )
             }
@@ -125,6 +126,7 @@ object RecurrenceExpander {
                 startAt = begin,
                 endAt = begin.plusMillis(duration),
                 location = event.location,
+                urgency = event.urgency,
                 recurrenceRuleId = rule?.id,
             )
         }
