@@ -1,3 +1,17 @@
 <resources>
-    <string name="app_name">语音助手</string>
+    <string name="app_name">生活助理</string>
+
+    <!-- 桌面小组件 -->
+    <string name="widget_today_name">生活助理 · 今天</string>
+    <string name="widget_today_description">今天的行程，一眼看完</string>
+    <string name="widget_today_title">今天</string>
+    <string name="widget_today_date_placeholder">今天的安排</string>
+    <!-- 桌面预览用这一份；真正显示的那句由 TodayWidgetContentBuilder.EMPTY_TODAY 给出，两处要保持一致 -->
+    <string name="widget_today_empty">今天没有安排</string>
+    <string name="widget_record">语音录入</string>
+    <string name="widget_more">还有 %1$d 条</string>
+    <string name="widget_read_failed">暂时读不到行程</string>
+    <!-- 给桌面预览看的样例行程，真实内容由代码填进来 -->
+    <string name="widget_sample_time">09:00</string>
+    <string name="widget_sample_title">项目评审会</string>
 </resources>
