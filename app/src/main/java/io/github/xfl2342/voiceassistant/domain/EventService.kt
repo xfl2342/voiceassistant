@@ -2,7 +2,11 @@ package io.github.xfl2342.voiceassistant.domain
 
 import io.github.xfl2342.voiceassistant.data.EventDetail
 import io.github.xfl2342.voiceassistant.data.EventRepository
+import io.github.xfl2342.voiceassistant.data.SettingsStore
+import io.github.xfl2342.voiceassistant.data.db.EventEntity
+import io.github.xfl2342.voiceassistant.data.db.RecurrenceRuleEntity
 import io.github.xfl2342.voiceassistant.reminder.ReminderScheduler
+import java.time.ZoneId
 
 /**
  * 行程的写操作。
@@ -15,6 +19,13 @@ class EventService(
     private val repository: EventRepository,
     private val reminderSync: ReminderSync,
     private val scheduler: ReminderScheduler,
+    private val settingsStore: SettingsStore,
+    /**
+     * 行程变化之后的额外动作（目前是重画桌面小组件）。
+     *
+     * 默认什么都不做：这一层不该知道桌面上有没有小组件，单独测业务时也不必准备它。
+     */
+    private val onScheduleChanged: () -> Unit = {},
 ) {
 
     suspend fun load(eventId: String): EventDetail? = repository.loadDetail(eventId)
@@ -34,16 +45,36 @@ class EventService(
             rule = bundle.rule,
             minutesList = bundle.reminders.mapNotNull { it.minutesBefore }.distinct(),
         )
+        onScheduleChanged()
     }
 
     /** 删除行程，并清掉它所有的提醒闹钟。 */
     suspend fun delete(eventId: String) {
         repository.remindersOf(eventId).forEach { scheduler.cancel(it.id) }
         repository.delete(eventId)
+        onScheduleChanged()
     }
 
     /** 重算全部行程的提醒（应用启动与开机后调用）。 */
     suspend fun refreshAllReminders() {
         reminderSync.refreshAll()
     }
+
+    /**
+     * 检查这条行程是否与日历里已有的行程撞时间。
+     *
+     * 只做检查、不落库：界面拿到结果后先问用户一句，
+     * 用户选择「仍然保存」再照常调用 [save]。
+     */
+    suspend fun findConflicts(
+        event: EventEntity,
+        rule: RecurrenceRuleEntity?,
+    ): ConflictReport = ConflictDetector.detect(
+        candidate = event,
+        candidateRule = rule,
+        existing = repository.loadEvents(),
+        existingRules = repository.loadRules(),
+        zone = ZoneId.of(EventEntity.DEFAULT_TIME_ZONE),
+        weekStartDay = settingsStore.weekStartDay,
+    )
 }

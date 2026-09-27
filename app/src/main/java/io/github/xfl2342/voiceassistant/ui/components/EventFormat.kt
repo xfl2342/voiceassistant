@@ -3,6 +3,7 @@ package io.github.xfl2342.voiceassistant.ui.components
 import io.github.xfl2342.voiceassistant.data.db.EventEntity
 import io.github.xfl2342.voiceassistant.data.db.RecurrenceRuleEntity
 import io.github.xfl2342.voiceassistant.domain.DayOfWeekCodes
+import io.github.xfl2342.voiceassistant.domain.EventConflict
 import io.github.xfl2342.voiceassistant.domain.ReminderPreset
 import java.time.Instant
 import java.time.LocalDate
@@ -59,4 +60,28 @@ object EventFormat {
 
     /** 提醒的中文描述。 */
     fun reminderDescription(minutesBefore: Int): String = ReminderPreset.describe(minutesBefore)
+
+    /**
+     * 冲突提示里的一行：「哪一天、几点到几点、原本是哪条行程」。
+     *
+     * 例：`9 月 26 日 周六 15:00 - 16:00 · 项目评审会`。
+     */
+    fun conflictDescription(conflict: EventConflict): String {
+        val date = conflict.date
+        val weekday = WEEKDAY_LABELS[date.dayOfWeek.value - 1]
+        val whenText = if (conflict.otherAllDay) {
+            "${shortDate(date)} $weekday（全天）"
+        } else {
+            val start = conflict.otherStartAt
+            val end = conflict.otherEndAt
+            when {
+                start == null -> "${shortDate(date)} $weekday"
+                end == null -> "${shortDate(date)} $weekday ${time(start)}"
+                else -> "${shortDate(date)} $weekday ${time(start)} - ${time(end)}"
+            }
+        }
+        return "$whenText · ${conflict.otherTitle}"
+    }
+
+    private val WEEKDAY_LABELS = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")
 }
