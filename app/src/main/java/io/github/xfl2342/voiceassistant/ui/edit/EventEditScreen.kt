@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimeInput
@@ -77,6 +76,18 @@ private enum class RepeatMode(val label: String) {
 }
 
 /**
+ * 这条记录有没有时间。
+ *
+ * 三档：[TIMED] 定时、[ALL_DAY] 全天、[TODO] 先记下来、时间以后再说。
+ * 待办不占日历格子，也不提醒，只在「全部日程」里单列一区。
+ */
+private enum class TimeKind(val label: String) {
+    TIMED("定时"),
+    ALL_DAY("全天"),
+    TODO("不设时间"),
+}
+
+/**
  * 急迫程度。
  *
  * 只影响日历上的颜色，不代表别的意思：这条行程要紧，就标红；
@@ -123,7 +134,7 @@ fun EventEditScreen(
     var original by remember { mutableStateOf<EventDetail?>(null) }
     var ready by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
-    var allDay by remember { mutableStateOf(false) }
+    var timeKind by remember { mutableStateOf(TimeKind.TIMED) }
     var startDate by remember { mutableStateOf(LocalDate.now(zone)) }
     var startTime by remember { mutableStateOf(LocalTime.of(9, 0)) }
     var endDate by remember { mutableStateOf(LocalDate.now(zone)) }
@@ -161,20 +172,31 @@ fun EventEditScreen(
         original = loaded
         val event = loaded.event
         title = event.title
-        allDay = event.allDay
+        timeKind = when {
+            event.isTodo -> TimeKind.TODO
+            event.allDay -> TimeKind.ALL_DAY
+            else -> TimeKind.TIMED
+        }
         location = event.location.orEmpty()
         urgency = Urgency.from(event.urgency)
-        if (event.allDay) {
-            val start = LocalDate.ofEpochDay(event.startEpochDay ?: LocalDate.now(zone).toEpochDay())
-            startDate = start
-            endDate = LocalDate.ofEpochDay(event.endEpochDay ?: start.toEpochDay())
-        } else {
-            val start = Instant.ofEpochMilli(event.startAt ?: 0).atZone(zone)
-            startDate = start.toLocalDate()
-            startTime = start.toLocalTime()
-            val end = event.endAt?.let { Instant.ofEpochMilli(it).atZone(zone) }
-            endDate = end?.toLocalDate() ?: startDate
-            endTime = end?.toLocalTime() ?: startTime.plusHours(1)
+        when {
+            // 待办没有时间，沿用新建时的默认值：日后改回「定时」也有个合理起点。
+            event.isTodo -> Unit
+            event.allDay -> {
+                val start = LocalDate.ofEpochDay(
+                    event.startEpochDay ?: LocalDate.now(zone).toEpochDay(),
+                )
+                startDate = start
+                endDate = LocalDate.ofEpochDay(event.endEpochDay ?: start.toEpochDay())
+            }
+            else -> {
+                val start = Instant.ofEpochMilli(event.startAt ?: 0).atZone(zone)
+                startDate = start.toLocalDate()
+                startTime = start.toLocalTime()
+                val end = event.endAt?.let { Instant.ofEpochMilli(it).atZone(zone) }
+                endDate = end?.toLocalDate() ?: startDate
+                endTime = end?.toLocalTime() ?: startTime.plusHours(1)
+            }
         }
         reminderMinutes = loaded.reminders.firstOrNull { it.minutesBefore != null }?.minutesBefore
         loaded.rule?.let { rule ->
@@ -202,8 +224,21 @@ fun EventEditScreen(
             createdAt = now,
             updatedAt = now,
         )
-        return if (allDay) {
-            base.copy(
+        return when (timeKind) {
+            // 待办：两组时间字段一起清空。留着半条旧时间就不再是「不设时间」了。
+            TimeKind.TODO -> base.copy(
+                title = title.trim(),
+                allDay = false,
+                startAt = null,
+                endAt = null,
+                startEpochDay = null,
+                endEpochDay = null,
+                location = location.trim().ifBlank { null },
+                urgency = urgency.value,
+                updatedAt = now,
+            )
+
+            TimeKind.ALL_DAY -> base.copy(
                 title = title.trim(),
                 allDay = true,
                 startAt = null,
@@ -214,27 +249,31 @@ fun EventEditScreen(
                 urgency = urgency.value,
                 updatedAt = now,
             )
-        } else {
-            val start = LocalDateTime.of(startDate, startTime).atZone(zone).toInstant()
-            var end = LocalDateTime.of(endDate, endTime).atZone(zone).toInstant()
-            // 结束时间早于开始时间时，按一小时处理，避免存进一条负数时长的行程。
-            if (end.isBefore(start)) end = start.plusSeconds(3600)
-            base.copy(
-                title = title.trim(),
-                allDay = false,
-                startAt = start.toEpochMilli(),
-                endAt = end.toEpochMilli(),
-                startEpochDay = null,
-                endEpochDay = null,
-                location = location.trim().ifBlank { null },
-                urgency = urgency.value,
-                updatedAt = now,
-            )
+
+            TimeKind.TIMED -> {
+                val start = LocalDateTime.of(startDate, startTime).atZone(zone).toInstant()
+                var end = LocalDateTime.of(endDate, endTime).atZone(zone).toInstant()
+                // 结束时间早于开始时间时，按一小时处理，避免存进一条负数时长的行程。
+                if (end.isBefore(start)) end = start.plusSeconds(3600)
+                base.copy(
+                    title = title.trim(),
+                    allDay = false,
+                    startAt = start.toEpochMilli(),
+                    endAt = end.toEpochMilli(),
+                    startEpochDay = null,
+                    endEpochDay = null,
+                    location = location.trim().ifBlank { null },
+                    urgency = urgency.value,
+                    updatedAt = now,
+                )
+            }
         }
     }
 
     /** 根据界面上的选择生成重复规则；选择「不重复」时返回 null（表示要清掉原有规则）。 */
     fun buildRule(original: RecurrenceRuleEntity?, eventId: String): RecurrenceRuleEntity? {
+        // 待办没有日期，重复规则也就没有起点可算，一律不存。
+        if (timeKind == TimeKind.TODO) return null
         if (repeatMode == RepeatMode.NONE) return null
 
         val days = if (repeatMode == RepeatMode.WEEKLY) {
@@ -262,14 +301,19 @@ fun EventEditScreen(
                 RecurrenceRuleEntity.END_TYPE_NEVER
             },
             endEpochDay = if (useEndDate) repeatEndDate?.toEpochDay() else null,
+            // 保留原来跳过的那几次：改了重复方式，不代表之前「这次不开」的决定要作废。
+            exceptionDates = original?.exceptionDates,
         )
     }
 
     /** 真正落库：行程、重复规则、提醒一起交给服务层。 */
     suspend fun persist(event: EventEntity, rule: RecurrenceRuleEntity?) {
-        val reminders = reminderMinutes
-            ?.let { listOf(ReminderPlanner.create(event, it)) }
-            .orEmpty()
+        // 待办没有时间，也就没有可以提醒的时刻。
+        val reminders = if (event.isTodo) {
+            emptyList()
+        } else {
+            reminderMinutes?.let { listOf(ReminderPlanner.create(event, it)) }.orEmpty()
+        }
         service.save(EventSaveBundle(event, rule, reminders))
         saving = false
         onSaved()
@@ -308,7 +352,12 @@ fun EventEditScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ 返回") }
             Text(
-                text = if (eventId == null) "新建行程" else "编辑行程",
+                text = when {
+                    timeKind == TimeKind.TODO && eventId == null -> "新建待办"
+                    timeKind == TimeKind.TODO -> "编辑待办"
+                    eventId == null -> "新建行程"
+                    else -> "编辑行程"
+                },
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -332,43 +381,69 @@ fun EventEditScreen(
                     singleLine = true,
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("全天", modifier = Modifier.weight(1f))
-                    Switch(checked = allDay, onCheckedChange = { allDay = it })
-                }
-
                 Text(
-                    text = "开始",
+                    text = "这条记录有没有时间",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { dateTarget = TimeField.START }) {
-                        Text(EventFormat.fullDate(startDate))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TimeKind.entries.forEach { option ->
+                        FilterChip(
+                            selected = timeKind == option,
+                            onClick = { timeKind = option },
+                            label = { Text(option.label) },
+                        )
                     }
-                    if (!allDay) {
-                        OutlinedButton(onClick = { timeTarget = TimeField.START }) {
-                            Text(EventFormat.time(LocalDateTime.of(startDate, startTime).atZone(zone).toInstant()))
+                }
+
+                if (timeKind == TimeKind.TODO) {
+                    Text(
+                        text = "待办不设时间，不占日历格子，只在「全部日程」里单列一区；" +
+                            "也不会提醒。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        text = "开始",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = { dateTarget = TimeField.START }) {
+                            Text(EventFormat.fullDate(startDate))
+                        }
+                        if (timeKind == TimeKind.TIMED) {
+                            OutlinedButton(onClick = { timeTarget = TimeField.START }) {
+                                Text(
+                                    EventFormat.time(
+                                        LocalDateTime.of(startDate, startTime).atZone(zone).toInstant(),
+                                    ),
+                                )
+                            }
                         }
                     }
-                }
 
-                Text(
-                    text = "结束",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { dateTarget = TimeField.END }) {
-                        Text(EventFormat.fullDate(endDate))
-                    }
-                    if (!allDay) {
-                        OutlinedButton(onClick = { timeTarget = TimeField.END }) {
-                            Text(EventFormat.time(LocalDateTime.of(endDate, endTime).atZone(zone).toInstant()))
+                    Text(
+                        text = "结束",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = { dateTarget = TimeField.END }) {
+                            Text(EventFormat.fullDate(endDate))
+                        }
+                        if (timeKind == TimeKind.TIMED) {
+                            OutlinedButton(onClick = { timeTarget = TimeField.END }) {
+                                Text(
+                                    EventFormat.time(
+                                        LocalDateTime.of(endDate, endTime).atZone(zone).toInstant(),
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
@@ -413,111 +488,115 @@ fun EventEditScreen(
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    text = "提醒",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                // 用可换行的布局：预设多的时候不至于把最后一个挤出屏幕。
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+        // 没有时间就没有「提前多久提醒」和「从哪天开始重复」可言，这两栏干脆不出现。
+        if (timeKind != TimeKind.TODO) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    ReminderPreset.entries.forEach { preset ->
-                        FilterChip(
-                            selected = reminderMinutes == preset.minutesBefore,
-                            onClick = { reminderMinutes = preset.minutesBefore },
-                            label = { Text(ReminderPreset.describe(preset.minutesBefore)) },
-                        )
-                    }
-                    FilterChip(
-                        selected = reminderMinutes == null,
-                        onClick = { reminderMinutes = null },
-                        label = { Text("不提醒") },
-                    )
-                }
-            }
-        }
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    text = "重复",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RepeatMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = repeatMode == mode,
-                            onClick = { repeatMode = mode },
-                            label = { Text(mode.label) },
-                        )
-                    }
-                }
-
-                if (repeatMode == RepeatMode.WEEKLY) {
                     Text(
-                        text = "每周的哪几天",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "提醒",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
+                    // 用可换行的布局：预设多的时候不至于把最后一个挤出屏幕。
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        DayOfWeek.entries.forEach { day ->
-                            val picked = day in repeatDays
+                        ReminderPreset.entries.forEach { preset ->
                             FilterChip(
-                                selected = picked,
-                                onClick = {
-                                    repeatDays = if (picked) repeatDays - day else repeatDays + day
-                                },
-                                label = { Text(DayOfWeekCodes.label(day)) },
+                                selected = reminderMinutes == preset.minutesBefore,
+                                onClick = { reminderMinutes = preset.minutesBefore },
+                                label = { Text(ReminderPreset.describe(preset.minutesBefore)) },
                             )
                         }
-                    }
-                    if (repeatDays.isEmpty()) {
-                        Text(
-                            text = "一天都没选时，会按行程开始那天重复。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        FilterChip(
+                            selected = reminderMinutes == null,
+                            onClick = { reminderMinutes = null },
+                            label = { Text("不提醒") },
                         )
                     }
                 }
+            }
 
-                if (repeatMode != RepeatMode.NONE) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Text(
-                        text = "结束方式",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "重复",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = repeatEndType == RecurrenceRuleEntity.END_TYPE_NEVER,
-                            onClick = { repeatEndType = RecurrenceRuleEntity.END_TYPE_NEVER },
-                            label = { Text("永不结束") },
-                        )
-                        FilterChip(
-                            selected = repeatEndType == RecurrenceRuleEntity.END_TYPE_ON_DATE,
-                            onClick = {
-                                repeatEndType = RecurrenceRuleEntity.END_TYPE_ON_DATE
-                                if (repeatEndDate == null) repeatEndDate = startDate
-                            },
-                            label = { Text("指定日期") },
-                        )
+                        RepeatMode.entries.forEach { mode ->
+                            FilterChip(
+                                selected = repeatMode == mode,
+                                onClick = { repeatMode = mode },
+                                label = { Text(mode.label) },
+                            )
+                        }
                     }
-                    if (repeatEndType == RecurrenceRuleEntity.END_TYPE_ON_DATE) {
-                        OutlinedButton(onClick = { dateTarget = TimeField.REPEAT_END }) {
-                            Text(repeatEndDate?.let(EventFormat::fullDate) ?: "选择结束日期")
+
+                    if (repeatMode == RepeatMode.WEEKLY) {
+                        Text(
+                            text = "每周的哪几天",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            DayOfWeek.entries.forEach { day ->
+                                val picked = day in repeatDays
+                                FilterChip(
+                                    selected = picked,
+                                    onClick = {
+                                        repeatDays =
+                                            if (picked) repeatDays - day else repeatDays + day
+                                    },
+                                    label = { Text(DayOfWeekCodes.label(day)) },
+                                )
+                            }
+                        }
+                        if (repeatDays.isEmpty()) {
+                            Text(
+                                text = "一天都没选时，会按行程开始那天重复。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    if (repeatMode != RepeatMode.NONE) {
+                        Text(
+                            text = "结束方式",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = repeatEndType == RecurrenceRuleEntity.END_TYPE_NEVER,
+                                onClick = { repeatEndType = RecurrenceRuleEntity.END_TYPE_NEVER },
+                                label = { Text("永不结束") },
+                            )
+                            FilterChip(
+                                selected = repeatEndType == RecurrenceRuleEntity.END_TYPE_ON_DATE,
+                                onClick = {
+                                    repeatEndType = RecurrenceRuleEntity.END_TYPE_ON_DATE
+                                    if (repeatEndDate == null) repeatEndDate = startDate
+                                },
+                                label = { Text("指定日期") },
+                            )
+                        }
+                        if (repeatEndType == RecurrenceRuleEntity.END_TYPE_ON_DATE) {
+                            OutlinedButton(onClick = { dateTarget = TimeField.REPEAT_END }) {
+                                Text(repeatEndDate?.let(EventFormat::fullDate) ?: "选择结束日期")
+                            }
                         }
                     }
                 }

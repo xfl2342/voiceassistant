@@ -27,10 +27,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.github.xfl2342.voiceassistant.data.FeedbackExporter
 import io.github.xfl2342.voiceassistant.data.FeedbackRepository
 import io.github.xfl2342.voiceassistant.data.db.FeedbackEntity
+import io.github.xfl2342.voiceassistant.ui.components.EventFormat
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
@@ -283,10 +285,27 @@ private fun FeedbackItem(
                 return@Column
             }
 
-            Text(
-                text = item.content,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            // 完成的划掉并打勾：待办那边用的是同一套标记，翻到哪一页都认得出。
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (item.done) {
+                    Text(
+                        text = EventFormat.DONE_MARK,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Text(
+                    text = item.content,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textDecoration = if (item.done) TextDecoration.LineThrough else null,
+                    color = if (item.done) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,

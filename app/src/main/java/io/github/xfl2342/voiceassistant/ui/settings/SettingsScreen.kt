@@ -14,15 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,10 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import io.github.xfl2342.voiceassistant.ai.DeepSeekClient
 import io.github.xfl2342.voiceassistant.data.SettingsStore
 import io.github.xfl2342.voiceassistant.data.ThemeMode
 import io.github.xfl2342.voiceassistant.data.TimeInputMode
@@ -52,12 +46,16 @@ import java.time.DayOfWeek
  * 所有可以调的东西都集中到这里，主界面只保留「用」相关的操作。
  * 目前有 DeepSeek、语音模型、时间选择方式、每周起始日、深色模式、改进意见、提醒设置
  * 与数据备份，后续的设置项也加在这里。
+ *
+ * DeepSeek 这一项只显示「配没配、用哪个模型」，点了才进 [DeepSeekScreen]：
+ * Key 的输入与清除都收在那一页，不会在这一页上露出来。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     settingsStore: SettingsStore,
     onBack: () -> Unit,
+    onOpenDeepSeek: () -> Unit,
     onOpenFeedback: () -> Unit,
     onOpenBackup: () -> Unit,
     onOpenReminderSettings: () -> Unit,
@@ -68,11 +66,9 @@ fun SettingsScreen(
     var timeInputMode by remember { mutableStateOf(settingsStore.timeInputMode) }
     var themeMode by remember { mutableStateOf(settingsStore.themeMode) }
     var weekStartDay by remember { mutableStateOf(settingsStore.weekStartDay) }
-    var apiKey by remember { mutableStateOf(settingsStore.deepSeekApiKey.orEmpty()) }
-    var deepSeekModel by remember { mutableStateOf(settingsStore.deepSeekModel) }
-    var showKey by remember { mutableStateOf(false) }
-    /** 「清除 Key」的二次确认：删掉容易，重新填一次要翻半天，所以问一句。 */
-    var confirmClearKey by remember { mutableStateOf(false) }
+    // 这一页不读 Key 明文，只读「配没配」和用哪个模型，用来在入口上显示一行状态。
+    val hasApiKey = settingsStore.hasApiKey
+    val deepSeekModelName = settingsStore.deepSeekModel
     val context = LocalContext.current
     val installer = remember { ModelInstaller(context) }
 
@@ -94,69 +90,26 @@ fun SettingsScreen(
             )
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenDeepSeek() },
+        ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
                     text = "DeepSeek（AI 解析）",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = {
-                        apiKey = it
-                        // 边输边存，免得改完忘了保存。
-                        // 但清空输入框不算「清除」——误删一段文字就把 Key 弄丢太容易了，
-                        // 真要清除请用下面的「清除 Key」，那里会再问一次。
-                        if (it.isNotBlank()) settingsStore.deepSeekApiKey = it
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("API Key") },
-                    singleLine = true,
-                    visualTransformation = if (showKey) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
-                    trailingIcon = {
-                        TextButton(onClick = { showKey = !showKey }) {
-                            Text(if (showKey) "隐藏" else "显示")
-                        }
-                    },
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    listOf(DeepSeekClient.MODEL_CHAT, DeepSeekClient.MODEL_REASONER).forEach { model ->
-                        FilterChip(
-                            selected = deepSeekModel == model,
-                            onClick = {
-                                deepSeekModel = model
-                                settingsStore.deepSeekModel = model
-                            },
-                            label = { Text(model) },
-                        )
-                    }
-                    FilterChip(
-                        selected = false,
-                        onClick = { confirmClearKey = true },
-                        label = { Text("清除 Key") },
-                    )
-                }
-                if (apiKey.isBlank() && settingsStore.hasApiKey) {
-                    Text(
-                        text = "输入框空着不影响已保存的 Key；要真的清除，请点上面的「清除 Key」。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
                 Text(
-                    text = "Key 用系统密钥库加密后存在本机，不会上传到别处；" +
-                        "应用直接向 DeepSeek 官方接口发起请求。",
+                    text = if (hasApiKey) {
+                        "已配置 · $deepSeekModelName"
+                    } else {
+                        "未配置。填上 Key 才能把说的话解析成行程"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -327,35 +280,6 @@ fun SettingsScreen(
         }
     }
 
-    if (confirmClearKey) {
-        AlertDialog(
-            onDismissRequest = { confirmClearKey = false },
-            title = { Text("清除 API Key？") },
-            text = {
-                Text(
-                    "清除后 AI 解析就用不了了，需要重新填一次 Key 才能继续用语音记行程。" +
-                        "已经记下的行程不受影响。"
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmClearKey = false
-                        apiKey = ""
-                        settingsStore.deepSeekApiKey = null
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) {
-                    Text("清除")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmClearKey = false }) { Text("取消") }
-            },
-        )
-    }
 }
 
 /**

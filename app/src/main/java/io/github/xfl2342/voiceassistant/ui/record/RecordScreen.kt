@@ -216,7 +216,10 @@ fun RecordScreen(
     }
 
     fun continueSave(bundle: EventSaveBundle) {
-        val needsNotificationPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        // 只有真的要排提醒时才去要通知权限：待办、或用户选了「不提醒」的行程，
+        // 没必要为此弹一次授权框。
+        val needsNotificationPermission = bundle.reminders.isNotEmpty() &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
 
@@ -403,9 +406,13 @@ fun RecordScreen(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     InfoRow("标题", parsed.title.ifBlank { "（空）" })
-                    InfoRow("开始", parsed.start.ifBlank { "（空）" })
-                    InfoRow("结束", parsed.end.ifBlank { "（空）" })
-                    if (parsed.allDay) InfoRow("类型", "全天")
+                    if (parsed.isTodo) {
+                        InfoRow("类型", "待办（不设时间）")
+                    } else {
+                        InfoRow("开始", parsed.start.ifBlank { "（空）" })
+                        InfoRow("结束", parsed.end.ifBlank { "（空）" })
+                        if (parsed.allDay) InfoRow("类型", "全天")
+                    }
                     if (parsed.location.isNotBlank()) InfoRow("地点", parsed.location)
                     InfoRow(
                         label = "急迫程度",
@@ -428,7 +435,13 @@ fun RecordScreen(
                         enabled = !saving,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (saving) "保存中…" else "保存到日历")
+                        Text(
+                            when {
+                                saving -> "保存中…"
+                                parsed.isTodo -> "保存待办"
+                                else -> "保存到日历"
+                            },
+                        )
                     }
                 }
             }
@@ -455,6 +468,8 @@ fun RecordScreen(
 
 /** 把提醒说清楚：用户明确说了就照实显示，没说就说明是按急迫程度取的默认值。 */
 private fun describeReminders(draft: EventDraft): String {
+    // 待办没有时间，谈不上提前多久提醒。
+    if (draft.isTodo) return "不提醒"
     if (draft.reminderMinutes.isNotEmpty()) {
         return draft.reminderMinutes.joinToString("、") { ReminderPreset.describe(it) }
     }

@@ -19,6 +19,7 @@ import io.github.xfl2342.voiceassistant.ui.edit.EventEditScreen
 import io.github.xfl2342.voiceassistant.ui.list.EventListScreen
 import io.github.xfl2342.voiceassistant.ui.record.RecordScreen
 import io.github.xfl2342.voiceassistant.ui.settings.BackupScreen
+import io.github.xfl2342.voiceassistant.ui.settings.DeepSeekScreen
 import io.github.xfl2342.voiceassistant.ui.settings.FeedbackScreen
 import io.github.xfl2342.voiceassistant.ui.settings.ReminderSettingsScreen
 import io.github.xfl2342.voiceassistant.ui.settings.SettingsScreen
@@ -29,11 +30,27 @@ import java.time.LocalDate
 private sealed interface AppScreen {
     data object Calendar : AppScreen
     data object Record : AppScreen
-    data class Detail(val eventId: String) : AppScreen
-    data class Edit(val eventId: String) : AppScreen
+    /**
+     * 行程详情。
+     *
+     * [from] 记住是从哪一页点进来的：从「全部日程」进来的，返回时就该回列表。
+     * 详情页自己算不出这件事，只能由跳转的那一方带进来。
+     *
+     * [occurrenceDate] 是「从日历上的某一天点进来的」——重复行程靠它才知道用户指的是哪一次，
+     * 也才能提供「只删这一次」。从列表或桌面小组件点进来时没有这一天。
+     */
+    data class Detail(
+        val eventId: String,
+        val from: AppScreen = Calendar,
+        val occurrenceDate: LocalDate? = null,
+    ) : AppScreen
+    /** 编辑行程。[backTo] 是编辑完之后要回去的那一页（进来时的那张详情页）。 */
+    data class Edit(val eventId: String, val backTo: AppScreen = Calendar) : AppScreen
     data class Create(val date: LocalDate) : AppScreen
     data object EventList : AppScreen
     data object Settings : AppScreen
+    /** DeepSeek 配置：Key 的输入、修改、删除都收在这一页，设置页只留一行状态。 */
+    data object DeepSeek : AppScreen
     /** 数据备份：把行程、提醒与改进意见导成一份文件。 */
     data object Backup : AppScreen
     /** 改进意见：手机上随手记，攒着连电脑时读走。 */
@@ -78,7 +95,13 @@ fun AppRoot(
                 AppScreen.Calendar -> CalendarScreen(
                     repository = graph.eventRepository,
                     onRecordClick = { screen = AppScreen.Record },
-                    onEventClick = { screen = AppScreen.Detail(it) },
+                    onEventClick = { eventId, date ->
+                        screen = AppScreen.Detail(
+                            eventId = eventId,
+                            from = AppScreen.Calendar,
+                            occurrenceDate = date,
+                        )
+                    },
                     onOpenReminderSettings = { screen = AppScreen.ReminderSettings() },
                     onOpenSettings = { screen = AppScreen.Settings },
                     onCreateClick = { screen = AppScreen.Create(it) },
@@ -98,9 +121,11 @@ fun AppRoot(
                 is AppScreen.Detail -> EventDetailScreen(
                     service = graph.eventService,
                     eventId = current.eventId,
-                    onBack = { screen = AppScreen.Calendar },
-                    onEdit = { screen = AppScreen.Edit(current.eventId) },
-                    onDeleted = { screen = AppScreen.Calendar },
+                    occurrenceDate = current.occurrenceDate,
+                    // 从哪进来的就回哪去：日历点开的回日历，全部日程点开的回列表。
+                    onBack = { screen = current.from },
+                    onEdit = { screen = AppScreen.Edit(current.eventId, backTo = current) },
+                    onDeleted = { screen = current.from },
                     modifier = padded,
                 )
 
@@ -109,8 +134,8 @@ fun AppRoot(
                     settingsStore = graph.settingsStore,
                     eventId = current.eventId,
                     initialDate = null,
-                    onBack = { screen = AppScreen.Detail(current.eventId) },
-                    onSaved = { screen = AppScreen.Detail(current.eventId) },
+                    onBack = { screen = current.backTo },
+                    onSaved = { screen = current.backTo },
                     modifier = padded,
                 )
 
@@ -127,18 +152,25 @@ fun AppRoot(
                 AppScreen.EventList -> EventListScreen(
                     repository = graph.eventRepository,
                     onBack = { screen = AppScreen.Calendar },
-                    onEventClick = { screen = AppScreen.Detail(it) },
+                    onEventClick = { screen = AppScreen.Detail(it, from = AppScreen.EventList) },
                     modifier = padded,
                 )
 
                 AppScreen.Settings -> SettingsScreen(
                     settingsStore = graph.settingsStore,
                     onBack = { screen = AppScreen.Calendar },
+                    onOpenDeepSeek = { screen = AppScreen.DeepSeek },
                     onOpenFeedback = { screen = AppScreen.Feedback },
                     onOpenBackup = { screen = AppScreen.Backup },
                     onOpenReminderSettings = { screen = AppScreen.ReminderSettings(fromSettings = true) },
                     onThemeModeChange = { themeMode = it },
                     onWeekStartChange = { weekStartDay = it },
+                    modifier = padded,
+                )
+
+                AppScreen.DeepSeek -> DeepSeekScreen(
+                    settingsStore = graph.settingsStore,
+                    onBack = { screen = AppScreen.Settings },
                     modifier = padded,
                 )
 

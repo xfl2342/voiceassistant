@@ -14,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.github.xfl2342.voiceassistant.data.EventDetail
 import io.github.xfl2342.voiceassistant.domain.EventService
@@ -33,6 +35,7 @@ import io.github.xfl2342.voiceassistant.ui.components.EventColors
 import io.github.xfl2342.voiceassistant.ui.components.EventFormat
 import io.github.xfl2342.voiceassistant.ui.components.InfoRow
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 /**
  * 行程详情页。
@@ -44,6 +47,8 @@ import kotlinx.coroutines.launch
 fun EventDetailScreen(
     service: EventService,
     eventId: String,
+    /** 从日历上某一天点进来时带上那一天；重复行程靠它提供「只删这一次」。 */
+    occurrenceDate: LocalDate? = null,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onDeleted: () -> Unit,
@@ -56,6 +61,26 @@ fun EventDetailScreen(
 
     LaunchedEffect(eventId) {
         detail = service.load(eventId)
+    }
+
+    fun deleteWhole() {
+        confirmDelete = false
+        deleting = true
+        scope.launch {
+            service.delete(eventId)
+            deleting = false
+            onDeleted()
+        }
+    }
+
+    fun skipThisOne(date: LocalDate) {
+        confirmDelete = false
+        deleting = true
+        scope.launch {
+            service.skipOccurrence(eventId, date)
+            deleting = false
+            onDeleted()
+        }
     }
 
     BackHandler(onBack = onBack)
@@ -95,8 +120,17 @@ fun EventDetailScreen(
                     text = current.event.title,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
+                    // 待办做完之后划掉标题：和列表里保持一致的说法。
+                    textDecoration = if (current.event.done) TextDecoration.LineThrough else null,
                 )
-                InfoRow("时间", EventFormat.timeDescription(current.event))
+                if (current.event.isTodo) {
+                    InfoRow(
+                        label = "类型",
+                        value = if (current.event.done) "待办（已完成）" else "待办（不设时间）",
+                    )
+                } else {
+                    InfoRow("时间", EventFormat.timeDescription(current.event))
+                }
                 InfoRow("急迫程度", EventColors.label(current.event.urgency))
                 EventFormat.recurrenceDescription(current.rule)?.let {
                     InfoRow("重复", it)
@@ -142,13 +176,31 @@ fun EventDetailScreen(
 
         if (current.rule != null) {
             Text(
-                text = "这是重复行程，修改会影响到所有重复的日程。",
+                text = if (occurrenceDate != null) {
+                    "这是重复行程，修改会影响到所有重复的日程；" +
+                        "删除时可以只跳过 ${EventFormat.fullDate(occurrenceDate)} 这一次。"
+                } else {
+                    "这是重复行程，修改会影响到所有重复的日程。"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (current.event.isTodo) {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            service.setTodoDone(eventId, !current.event.done)
+                            // 重新读一次，让标记与标题立刻对上。
+                            detail = service.load(eventId)
+                        }
+                    },
+                ) {
+                    Text(if (current.event.done) "撤销完成" else "标记完成")
+                }
+            }
             Button(onClick = onEdit) { Text("编辑") }
             Button(
                 onClick = { confirmDelete = true },
@@ -164,23 +216,45 @@ fun EventDetailScreen(
     }
 
     if (confirmDelete) {
+        // 从日历上某一天点进来的重复行程，才能问「只删这一次还是整条」。
+        val skipDate = occurrenceDate?.takeIf { current?.rule != null }
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("删除这条行程？") },
-            text = { Text("删除后这条行程的提醒也会一并取消，无法从应用里恢复。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        confirmDelete = false
-                        deleting = true
-                        scope.launch {
-                            service.delete(eventId)
-                            deleting = false
-                            onDeleted()
+            title = { Text(if (skipDate == null) "删除这条行程？" else "删哪一次？") },
+            text = {
+                if (skipDate == null) {
+                    Text("删除后这条行程的提醒也会一并取消，无法从应用里恢复。")
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "「只删这一次」把 ${EventFormat.fullDate(skipDate)} 这次跳过，" +
+                                "往后各次照常提醒；「删除整条」则把这条重复行程整个去掉。",
+                        )
+                        Button(
+                            onClick = { skipThisOne(skipDate) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !deleting,
+                        ) {
+                            Text("只删这一次（${EventFormat.shortDate(skipDate)}）")
+                        }
+                        OutlinedButton(
+                            onClick = { deleteWhole() },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !deleting,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) {
+                            Text("删除整条重复行程")
                         }
                     }
-                ) {
-                    Text("删除")
+                }
+            },
+            confirmButton = {
+                if (skipDate == null) {
+                    TextButton(onClick = { deleteWhole() }, enabled = !deleting) {
+                        Text("删除")
+                    }
                 }
             },
             dismissButton = {
