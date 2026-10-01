@@ -10,6 +10,11 @@
 
     <!-- 到点提醒需要发通知 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 提醒要像闹钟一样响：声音走闹钟通道，同时震动 -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Android 14 起，全屏提醒（锁屏上直接亮起来的那一屏）要单独授权；
+         没授权也能响，只是不会自动亮屏，会在通知栏里等 -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- 精确到分钟触发提醒；Android 12 起还需要用户在系统设置中允许 -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- 重启后重新注册提醒，否则重启一次提醒就再也不响了 -->
@@ -48,6 +53,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 到点弹出来的那一屏；锁屏上直接亮起来，不用先解锁 -->
+        <activity
+            android:name=".reminder.ReminderAlarmActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:theme="@style/Theme.VoiceAssistant"
+            android:turnScreenOn="true" />
 
         <!-- 闹钟到点时唤起，弹出通知 -->
         <receiver

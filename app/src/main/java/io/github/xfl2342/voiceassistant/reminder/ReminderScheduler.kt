@@ -3,7 +3,6 @@ package io.github.xfl2342.voiceassistant.reminder
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import io.github.xfl2342.voiceassistant.data.db.ReminderEntity
 
@@ -59,16 +58,45 @@ class ReminderScheduler(private val context: Context) {
         alarmManager.cancel(pendingIntent(reminderId, eventId = "", title = ""))
     }
 
-    private fun pendingIntent(reminderId: String, eventId: String, title: String): PendingIntent {
-        val intent = Intent(context, ReminderReceiver::class.java).apply {
-            action = ReminderReceiver.ACTION_REMINDER
-            putExtra(ReminderReceiver.EXTRA_EVENT_ID, eventId)
-            putExtra(ReminderReceiver.EXTRA_TITLE, title)
+    /**
+     * 稍后再响一次。
+     *
+     * 这是一次性的临时闹钟，**不写进提醒表**：稍后十分钟是「刚刚这个动作」，
+     * 不是行程本身的提醒规则，不该因为按了一次就多出一条记录。
+     *
+     * requestCode 只跟行程绑定：连着按两次「稍后」只会重排同一个闹钟，
+     * 而不是十分钟后响两声。
+     */
+    fun snooze(eventId: String, title: String, minutes: Int) {
+        val triggerAt = System.currentTimeMillis() + minutes * 60_000L
+        val pendingIntent = pendingIntent(
+            reminderId = snoozeId(eventId),
+            eventId = eventId,
+            title = title,
+        )
+        if (canScheduleExact) {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAt,
+                pendingIntent,
+            )
+        } else {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
         }
+    }
+
+    /** 撤掉某条行程还没响的「稍后提醒」（测试与清理时用得上）。 */
+    fun cancelSnooze(eventId: String) {
+        alarmManager.cancel(pendingIntent(snoozeId(eventId), eventId = "", title = ""))
+    }
+
+    private fun snoozeId(eventId: String): String = "snooze:$eventId"
+
+    private fun pendingIntent(reminderId: String, eventId: String, title: String): PendingIntent {
         return PendingIntent.getBroadcast(
             context,
             reminderId.hashCode(),
-            intent,
+            ReminderReceiver.intent(context, ReminderReceiver.ACTION_REMINDER, eventId, title),
             // extras 不参与 PendingIntent 的相等判断，因此取消时用同一套 action 和 requestCode 即可。
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

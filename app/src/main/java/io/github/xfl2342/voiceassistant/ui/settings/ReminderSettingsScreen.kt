@@ -70,10 +70,10 @@ fun ReminderSettingsScreen(
             )
         }
 
-        if (status.allGood) {
+        if (status.allRingingGood) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "三项设置都已就绪，提醒会准时弹出。",
+                    text = "四项设置都已就绪：提醒会准时响，并自动亮屏。",
                     modifier = Modifier.padding(16.dp),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -92,6 +92,14 @@ fun ReminderSettingsScreen(
             granted = status.notificationsEnabled,
             reason = "关掉通知，提醒就不会出现在通知栏里。",
             onOpen = { ReminderPermissions.openNotificationSettings(context) },
+        )
+
+        PermissionItem(
+            title = "全屏提醒",
+            granted = status.fullScreenAlarmAllowed,
+            reason = "开启后提醒会在锁屏上直接亮起来，像闹钟一样；" +
+                "关着也照样响，只是要自己在通知栏里点开。",
+            onOpen = { ReminderPermissions.openFullScreenIntentSettings(context) },
         )
 
         PermissionItem(
