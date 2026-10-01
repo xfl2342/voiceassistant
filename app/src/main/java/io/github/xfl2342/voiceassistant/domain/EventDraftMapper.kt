@@ -40,18 +40,43 @@ object EventDraftMapper {
         require(draft.title.isNotBlank()) { "标题为空，无法保存" }
 
         val timestamp = now.toEpochMilli()
-        val event = if (draft.allDay) {
-            buildAllDayEvent(draft, eventId, zone, timestamp, rawText)
-        } else {
-            buildTimedEvent(draft, eventId, zone, timestamp, rawText)
+        val event = when {
+            draft.isTodo -> buildTodoEvent(draft, eventId, zone, timestamp, rawText)
+            draft.allDay -> buildAllDayEvent(draft, eventId, zone, timestamp, rawText)
+            else -> buildTimedEvent(draft, eventId, zone, timestamp, rawText)
         }
 
         EventSaveBundle(
             event = event,
-            rule = buildRule(draft, eventId),
-            reminders = buildReminders(draft, event),
+            // 待办没有时间：既没有「下一次」可以重复，也没有可以提醒的时刻。
+            rule = if (draft.isTodo) null else buildRule(draft, eventId),
+            reminders = if (draft.isTodo) emptyList() else buildReminders(draft, event),
         )
     }
+
+    /**
+     * 不设时间的待办：两组时间字段都留空。
+     *
+     * 模型可能没听出时间（missing_fields 里有 time），也可能是用户本来就没打算定时间——
+     * 判断权在模型给出的 kind 上，这里只负责照做：存成待办，不编造一个时间出来。
+     */
+    private fun buildTodoEvent(
+        draft: EventDraft,
+        eventId: String,
+        zone: ZoneId,
+        timestamp: Long,
+        rawText: String?,
+    ): EventEntity = EventEntity(
+        id = eventId,
+        title = draft.title,
+        allDay = false,
+        timeZone = zone.id,
+        location = draft.location.ifBlank { null },
+        urgency = EventEntity.normalizeUrgency(draft.urgency),
+        rawText = rawText,
+        createdAt = timestamp,
+        updatedAt = timestamp,
+    )
 
     private fun buildTimedEvent(
         draft: EventDraft,

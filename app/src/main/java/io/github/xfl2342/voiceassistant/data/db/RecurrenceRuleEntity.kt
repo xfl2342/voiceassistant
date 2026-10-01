@@ -44,6 +44,14 @@ data class RecurrenceRuleEntity(
 
     /** endType 为 on_date 时的结束日期（本地日期 epochDay）。 */
     val endEpochDay: Long? = null,
+
+    /**
+     * 例外日期（iCalendar 里的 EXDATE）：这几天跳过，不产生发生。
+     *
+     * 「每周三例会，但下周三那次不开了」只用记这一天，不必动规则本身。
+     * 存法与 [byDay] 一样是逗号分隔的文本，只不过装的是本地日期的 epochDay。
+     */
+    val exceptionDates: String? = null,
 ) {
     companion object {
         const val FREQUENCY_DAILY = "daily"

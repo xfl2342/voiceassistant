@@ -208,6 +208,47 @@ class EventDraftMapperTest {
         assertTrue(result.exceptionOrNull()?.message?.contains("开始时间") == true)
     }
 
+    @Test
+    fun `待办不设时间也能存下来`() {
+        val draft = draft(
+            title = "买牛奶",
+            start = "",
+            end = "",
+            kind = EventDraft.KIND_TODO,
+            urgency = "low",
+        )
+
+        val bundle = EventDraftMapper
+            .toBundle(draft, rawText = "记个待办，买牛奶", zone = zone)
+            .getOrThrow()
+
+        assertTrue(bundle.event.isTodo)
+        assertEquals(null, bundle.event.startAt)
+        assertEquals(null, bundle.event.startEpochDay)
+        assertEquals("买牛奶", bundle.event.title)
+        assertEquals("记个待办，买牛奶", bundle.event.rawText)
+        // 没有时间就没有「下一次」，也没有可提醒的时刻。
+        assertEquals(null, bundle.rule)
+        assertTrue(bundle.reminders.isEmpty())
+    }
+
+    @Test
+    fun `模型说是待办时就算多给了时间也只存成待办`() {
+        // 模型偶尔会多此一举给个时间。kind 是它的明确判断，以它为准，
+        // 免得用户说的「先记下来」被悄悄改回一条排进日历的行程。
+        val draft = draft(
+            title = "买电池",
+            start = "2026-10-01T09:00:00+08:00",
+            end = "",
+            kind = EventDraft.KIND_TODO,
+        )
+
+        val bundle = EventDraftMapper.toBundle(draft, null, zone).getOrThrow()
+
+        assertTrue(bundle.event.isTodo)
+        assertEquals(null, bundle.event.startAt)
+    }
+
     private fun atEpochMillis(
         year: Int,
         month: Int,
@@ -224,6 +265,7 @@ class EventDraftMapperTest {
         start: String,
         end: String,
         allDay: Boolean = false,
+        kind: String = EventDraft.KIND_EVENT,
         location: String = "",
         urgency: String = "normal",
         reminderMinutes: List<Int> = emptyList(),
@@ -234,6 +276,7 @@ class EventDraftMapperTest {
         start = start,
         end = end,
         allDay = allDay,
+        kind = kind,
         location = location,
         urgency = urgency,
         confidence = 0.9,

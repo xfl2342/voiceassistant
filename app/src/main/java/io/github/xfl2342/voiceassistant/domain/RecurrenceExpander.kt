@@ -42,8 +42,13 @@ object RecurrenceExpander {
         return events
             .asSequence()
             .filter { !it.deleted }
-            .flatMap {
-                expandOne(it, rulesByEvent[it.id].orEmpty().firstOrNull(), from, to, zone, weekStartDay)
+            .flatMap { event ->
+                val rule = rulesByEvent[event.id].orEmpty().firstOrNull()
+                // 例外日期（EXDATE）最后再滤：这样「跳过某一天」对定时行程、
+                // 全天行程、跨天的全天行程是同一个说法——那一天就是不出现。
+                val skipped = ExceptionDates.parse(rule?.exceptionDates)
+                expandOne(event, rule, from, to, zone, weekStartDay)
+                    .filterNot { it.date in skipped }
             }
             .sortedWith(
                 compareBy(

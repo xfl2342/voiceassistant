@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ReminderEntity::class,
         FeedbackEntity::class,
     ],
-    version = 3,
+    version = 5,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -66,6 +66,33 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * v3 → v4：行程加一列「已完成」，待办靠它区分「还没做」和「做完了」。
+         *
+         * 已有的行程一律按「没完成」处理：这条列是给待办用的，老的定时行程和全天行程
+         * 本来也没有「完成」这回事。
+         */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `events` ADD COLUMN `done` INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        /**
+         * v4 → v5：重复规则加一列「例外日期」，用来跳过某一次。
+         *
+         * 已有的规则一律没有例外（null），行为与升级前完全一致。
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `recurrence_rules` ADD COLUMN `exceptionDates` TEXT",
+                )
+            }
+        }
+
+        /**
          * 全局唯一实例。
          *
          * 后台广播（比如开机后重新注册提醒）和界面可能在不同入口各自取数据库，
@@ -84,6 +111,6 @@ abstract class AppDatabase : RoomDatabase() {
                 context,
                 AppDatabase::class.java,
                 DATABASE_NAME,
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
     }
 }

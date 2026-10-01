@@ -261,6 +261,91 @@ class RecurrenceExpanderTest {
         assertTrue(result.all { it.urgency == EventEntity.URGENCY_HIGH })
     }
 
+    @Test
+    fun `跳过的那一次不再出现，其余照旧`() {
+        val event = timedEvent(at(monday, 8), at(monday, 9))
+        val weekly = rule(event.id, RecurrenceRuleEntity.FREQUENCY_WEEKLY, byDay = "MO")
+            .copy(exceptionDates = ExceptionDates.format(setOf(monday.plusDays(7))))
+
+        val result = expand(listOf(event), listOf(weekly), monday, monday.plusDays(27))
+
+        assertEquals(
+            listOf(monday, monday.plusDays(14), monday.plusDays(21)),
+            result.map { it.date },
+        )
+    }
+
+    @Test
+    fun `跳过的日期不在规则里时一次都不少`() {
+        val event = timedEvent(at(monday, 8), at(monday, 9))
+        val weekly = rule(event.id, RecurrenceRuleEntity.FREQUENCY_WEEKLY, byDay = "MO")
+            // 周二本来就不开会，把这天记成例外不该影响任何一个周一。
+            .copy(exceptionDates = ExceptionDates.format(setOf(monday.plusDays(1))))
+
+        val result = expand(listOf(event), listOf(weekly), monday, monday.plusDays(27))
+
+        assertEquals(
+            listOf(monday, monday.plusDays(7), monday.plusDays(14), monday.plusDays(21)),
+            result.map { it.date },
+        )
+    }
+
+    @Test
+    fun `全天行程的例外同样生效`() {
+        val event = allDayEvent(monday)
+        val weekly = rule(event.id, RecurrenceRuleEntity.FREQUENCY_WEEKLY, byDay = "MO")
+            .copy(exceptionDates = ExceptionDates.format(setOf(monday.plusDays(14))))
+
+        val result = expand(listOf(event), listOf(weekly), monday, monday.plusDays(21))
+
+        assertEquals(listOf(monday, monday.plusDays(7), monday.plusDays(21)), result.map { it.date })
+    }
+
+    @Test
+    fun `跨天的全天行程只去掉被跳过的那一天`() {
+        val event = allDayEvent(monday, monday.plusDays(2))
+        val weekly = rule(event.id, RecurrenceRuleEntity.FREQUENCY_WEEKLY, byDay = "MO")
+            .copy(exceptionDates = ExceptionDates.format(setOf(monday.plusDays(1))))
+
+        val result = expand(listOf(event), listOf(weekly), monday, monday.plusDays(7))
+
+        // 三天变成两天：被跳过的那天不出现，同一轮里剩下的照旧。
+        assertEquals(listOf(monday, monday.plusDays(2), monday.plusDays(7)), result.map { it.date })
+    }
+
+    @Test
+    fun `不设时间的待办不会落到任何一天`() {
+        // 待办两组时间字段都空。日历、桌面小组件、冲突检测都靠这里「算不出日期就
+        // 不产生发生」这条规矩把它们挡在外面，所以单独钉一下。
+        val todo = todoEvent()
+
+        val result = expand(listOf(todo), emptyList(), monday, monday.plusMonths(2))
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `待办就算被硬塞一条重复规则也不会出现`() {
+        val todo = todoEvent()
+        val result = expand(
+            listOf(todo),
+            listOf(rule(todo.id, RecurrenceRuleEntity.FREQUENCY_DAILY)),
+            monday,
+            monday.plusMonths(2),
+        )
+
+        assertTrue(result.isEmpty())
+    }
+
+    private fun todoEvent(id: String = "todo"): EventEntity = EventEntity(
+        id = id,
+        title = "买牛奶",
+        allDay = false,
+        timeZone = zone.id,
+        createdAt = 0,
+        updatedAt = 0,
+    )
+
     private fun expand(
         events: List<EventEntity>,
         rules: List<RecurrenceRuleEntity>,

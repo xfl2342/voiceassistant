@@ -35,7 +35,12 @@ object PromptBuilder {
                用日期表示，例如 2026-10-01，不带时间部分。
             6. 用户明确说了提醒时间就填进 reminders；没说则根据事情的急迫程度给出
                urgency，取值只能是 high、normal、low 之一。
-            7. 无法确定的字段名放进 missing_fields；confidence 是 0 到 1 之间的小数。
+            7. 分清「有具体时间的事」与「只是要记住要做的事」：
+               - 有具体时间（包括全天）：kind 填 event；
+               - 只是要记住有这么件事、本来就没打算定时间（例如「记个待办：买牛奶」
+                 「提醒我买电池」）：kind 填 todo，start 与 end 都填 null，
+                 并且 missing_fields 里不要再放 time。
+            8. 无法确定的字段名放进 missing_fields；confidence 是 0 到 1 之间的小数。
 
             字段格式如下：
             {
@@ -43,6 +48,7 @@ object PromptBuilder {
               "start": "开始时间或日期",
               "end": "结束时间或日期",
               "all_day": false,
+              "kind": "event 或 todo",
               "location": "",
               "notes": "",
               "reminders": [{"type": "before", "minutes": 15}],

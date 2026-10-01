@@ -23,7 +23,7 @@ class BackupJsonTest {
         val text = BackupJson.render(snapshot(), now = 1_774_000_000_000L)
 
         assertTrue(text.contains(""""format": "voiceassistant-backup","""))
-        assertTrue(text.contains(""""formatVersion": 1,"""))
+        assertTrue(text.contains(""""formatVersion": ${BackupJson.FORMAT_VERSION},"""))
         assertTrue(text.contains(""""exportedAt": 1774000000000,"""))
         assertTrue(text.contains(""""exportedAtText": """"))
         assertTrue(text.contains(""""events": 1,"""))
@@ -41,7 +41,12 @@ class BackupJsonTest {
         assertTrue(text.contains(""""allDay": false,"""))
         assertTrue(text.contains(""""startAt": 1774000000000,"""))
         assertTrue(text.contains(""""urgency": "high","""))
+        // 行程这边也带一个 done（待办的完成标记），和「改进意见」那一列同名不同表。
+        assertTrue(text.contains(""""done": false,"""))
         assertTrue(text.contains(""""byDay": "MO,WE","""))
+        // 重复规则里跳过的那几次也要跟着走，不然换机之后它们又冒出来了。
+        // 它是规则对象里的最后一项，所以后面没有逗号。
+        assertTrue(text.contains("\"exceptionDates\": \"20687\""))
         assertTrue(text.contains(""""minutesBefore": 15,"""))
         assertTrue(text.contains(""""content": "日历首页想看到天气","""))
         assertTrue(text.contains(""""done": false"""))
@@ -124,6 +129,7 @@ class BackupJsonTest {
                 eventId = "e1",
                 frequency = RecurrenceRuleEntity.FREQUENCY_WEEKLY,
                 byDay = "MO,WE",
+                exceptionDates = "20687",
             ),
         ),
         reminders = listOf(

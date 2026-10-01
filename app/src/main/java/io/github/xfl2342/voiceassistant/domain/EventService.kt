@@ -6,6 +6,7 @@ import io.github.xfl2342.voiceassistant.data.SettingsStore
 import io.github.xfl2342.voiceassistant.data.db.EventEntity
 import io.github.xfl2342.voiceassistant.data.db.RecurrenceRuleEntity
 import io.github.xfl2342.voiceassistant.reminder.ReminderScheduler
+import java.time.LocalDate
 import java.time.ZoneId
 
 /**
@@ -52,6 +53,36 @@ class EventService(
     suspend fun delete(eventId: String) {
         repository.remindersOf(eventId).forEach { scheduler.cancel(it.id) }
         repository.delete(eventId)
+        onScheduleChanged()
+    }
+
+    /**
+     * 给一条待办打勾 / 取消打勾。
+     *
+     * 待办既没有提醒也没有重复规则，所以只改这一个标记；行程数据变了，
+     * 照例让桌面小组件重画一次。
+     */
+    suspend fun setTodoDone(eventId: String, done: Boolean) {
+        repository.setDone(eventId, done)
+        onScheduleChanged()
+    }
+
+    /**
+     * 跳过重复行程的某一次（iCalendar 里的 EXDATE）。
+     *
+     * 只往规则上记一天，不删行程、也不动规则本身：那一天不再产生发生，
+     * 它的提醒随重算一起撤掉，其余各次照旧。
+     */
+    suspend fun skipOccurrence(eventId: String, date: LocalDate) {
+        val detail = repository.loadDetail(eventId) ?: return
+        val rule = detail.rule ?: return
+        val updated = rule.copy(exceptionDates = ExceptionDates.add(rule.exceptionDates, date))
+        if (updated.exceptionDates == rule.exceptionDates) return
+
+        // 与 save() 同一套路：先落库，再让提醒按新规则重算一遍。
+        val minutes = detail.reminders.mapNotNull { it.minutesBefore }.distinct()
+        repository.save(detail.event, updated, emptyList())
+        reminderSync.refresh(detail.event, updated, minutes)
         onScheduleChanged()
     }
 

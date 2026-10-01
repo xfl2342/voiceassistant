@@ -13,6 +13,12 @@ data class EventDraft(
     val start: String,
     val end: String,
     val allDay: Boolean,
+    /**
+     * 这条记录是哪一类：`event` 是有时间的行程，`todo` 是不设时间的待办。
+     *
+     * 由模型判断，用户事后也能在编辑页改。待办不要求时间，所以 [start] 允许是空的。
+     */
+    val kind: String = KIND_EVENT,
     val location: String,
     val urgency: String,
     val confidence: Double,
@@ -26,11 +32,15 @@ data class EventDraft(
     val recurrenceEndDate: String? = null,
 ) {
 
+    /** 是不是不设时间的待办。 */
+    val isTodo: Boolean get() = kind == KIND_TODO
+
     /** 需要提醒用户留意的地方。 */
     val warnings: List<String>
         get() = buildList {
             if (title.isBlank()) add("标题缺失")
-            if (start.isBlank() || start == "null") add("开始时间缺失")
+            // 待办本来就没有时间，不必再提示一句「时间缺失」。
+            if (!isTodo && (start.isBlank() || start == "null")) add("开始时间缺失")
             if (missingFields.isNotEmpty()) {
                 add("模型标注缺失：" + missingFields.joinToString("、"))
             }
@@ -40,6 +50,9 @@ data class EventDraft(
     companion object {
 
         private const val LOW_CONFIDENCE = 0.6
+
+        const val KIND_EVENT = "event"
+        const val KIND_TODO = "todo"
 
         /**
          * 从模型返回的文本解析出行程草稿。
@@ -55,6 +68,11 @@ data class EventDraft(
                 start = json.optString("start").orEmpty(),
                 end = json.optString("end").orEmpty(),
                 allDay = json.optBoolean("all_day", false),
+                kind = if (json.optString("kind").trim().lowercase() == KIND_TODO) {
+                    KIND_TODO
+                } else {
+                    KIND_EVENT
+                },
                 location = json.optString("location").orEmpty(),
                 urgency = json.optString("urgency", "normal").orEmpty(),
                 confidence = json.optDouble("confidence", 0.0),

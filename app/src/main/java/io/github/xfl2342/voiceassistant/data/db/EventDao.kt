@@ -32,4 +32,8 @@ interface EventDao {
 
     @Query("UPDATE events SET deleted = 1, updatedAt = :now WHERE id = :id")
     suspend fun softDelete(id: String, now: Long)
+
+    /** 打勾 / 取消打勾。目前只有待办会用到。 */
+    @Query("UPDATE events SET done = :done, updatedAt = :now WHERE id = :id")
+    suspend fun setDone(id: String, done: Boolean, now: Long)
 }

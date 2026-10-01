@@ -13,6 +13,12 @@ import java.time.format.DateTimeFormatter
 /** 行程信息的文字格式化，详情页与编辑页共用。 */
 object EventFormat {
 
+    /** 不设时间的待办在界面上显示的字。 */
+    const val NO_TIME_LABEL = "不定时间"
+
+    /** 完成标记的符号。待办与改进意见共用这一个，两处看着才像一套东西。 */
+    const val DONE_MARK = "✓"
+
     private val zone: ZoneId = ZoneId.of(EventEntity.DEFAULT_TIME_ZONE)
     private val timeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     private val fullDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")
@@ -24,19 +30,27 @@ object EventFormat {
 
     fun time(instant: Instant): String = timeFormatter.format(instant.atZone(zone))
 
-    /** 行程时间的一句话描述。 */
-    fun timeDescription(event: EventEntity): String = if (event.allDay) {
-        val start = LocalDate.ofEpochDay(event.startEpochDay ?: 0)
-        val end = LocalDate.ofEpochDay(event.endEpochDay ?: start.toEpochDay())
-        if (start == end) "${fullDate(start)}（全天）" else "${fullDate(start)} 至 ${fullDate(end)}（全天）"
-    } else {
-        val start = Instant.ofEpochMilli(event.startAt ?: 0)
-        val end = event.endAt?.let(Instant::ofEpochMilli)
-        val date = start.atZone(zone).toLocalDate()
-        if (end == null) {
-            "${fullDate(date)} ${time(start)}"
-        } else {
-            "${fullDate(date)} ${time(start)} - ${time(end)}"
+    /** 行程时间的一句话描述；待办没有时间，直接说清楚。 */
+    fun timeDescription(event: EventEntity): String = when {
+        event.isTodo -> NO_TIME_LABEL
+        event.allDay -> {
+            val start = LocalDate.ofEpochDay(event.startEpochDay ?: 0)
+            val end = LocalDate.ofEpochDay(event.endEpochDay ?: start.toEpochDay())
+            if (start == end) {
+                "${fullDate(start)}（全天）"
+            } else {
+                "${fullDate(start)} 至 ${fullDate(end)}（全天）"
+            }
+        }
+        else -> {
+            val start = Instant.ofEpochMilli(event.startAt ?: 0)
+            val end = event.endAt?.let(Instant::ofEpochMilli)
+            val date = start.atZone(zone).toLocalDate()
+            if (end == null) {
+                "${fullDate(date)} ${time(start)}"
+            } else {
+                "${fullDate(date)} ${time(start)} - ${time(end)}"
+            }
         }
     }
 

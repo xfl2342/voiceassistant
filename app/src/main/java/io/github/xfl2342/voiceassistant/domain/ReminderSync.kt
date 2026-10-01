@@ -72,6 +72,8 @@ class ReminderSync(
         now: Instant,
     ): List<ReminderEntity> {
         if (minutesList.isEmpty()) return emptyList()
+        // 待办没有时间，排不出提醒；数据要是从别处带进来一条，也在这里挡掉。
+        if (event.isTodo) return emptyList()
 
         val anchors: List<Instant> = if (rule == null) {
             listOf(ReminderPlanner.anchorOf(event, zone))

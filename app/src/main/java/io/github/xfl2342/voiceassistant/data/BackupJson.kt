@@ -59,8 +59,14 @@ object BackupJson {
     /** 认文件的标记：日后用户拿错文件（比如把别人的备份塞进来）时能认出来。 */
     const val FORMAT = "voiceassistant-backup"
 
-    /** 格式版本。字段增删时加一，并在读的那一头按版本分支。 */
-    const val FORMAT_VERSION = 1
+    /**
+     * 格式版本。字段增删时加一，并在读的那一头按版本分支。
+     *
+     * v2：行程多了 `done`（待办的完成标记）。
+     * v3：重复规则多了 `exceptionDates`（跳过的那几次）。
+     * 老文件一律照读，缺哪一项就按它的默认值处理。
+     */
+    const val FORMAT_VERSION = 3
 
     private const val NOTE =
         "生活助理的数据备份：行程、重复规则、提醒与改进意见。不含 API Key 与各项设置，只含未删除的行程。"
@@ -143,6 +149,8 @@ object BackupJson {
         location = item.stringOrNull("location"),
         notes = item.stringOrNull("notes"),
         urgency = EventEntity.normalizeUrgency(item.stringOrNull("urgency")),
+        // v1 的备份里没有这一项，读成「没完成」。
+        done = item.optBoolean("done", false),
         rawText = item.stringOrNull("rawText"),
         createdAt = item.longOrNull("createdAt") ?: 0L,
         updatedAt = item.longOrNull("updatedAt") ?: 0L,
@@ -172,6 +180,7 @@ object BackupJson {
                 RecurrenceRuleEntity.END_TYPE_NEVER
             },
             endEpochDay = item.longOrNull("endEpochDay"),
+            exceptionDates = item.stringOrNull("exceptionDates"),
         )
     }
 
@@ -229,6 +238,7 @@ object BackupJson {
         "location" to str(event.location),
         "notes" to str(event.notes),
         "urgency" to str(event.urgency),
+        "done" to bool(event.done),
         "rawText" to str(event.rawText),
         "createdAt" to num(event.createdAt),
         "updatedAt" to num(event.updatedAt),
@@ -242,6 +252,7 @@ object BackupJson {
         "byDay" to str(rule.byDay),
         "endType" to str(rule.endType),
         "endEpochDay" to num(rule.endEpochDay),
+        "exceptionDates" to str(rule.exceptionDates),
     )
 
     private fun reminder(reminder: ReminderEntity): JsonValue = obj(

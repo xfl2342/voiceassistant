@@ -91,4 +91,13 @@ class EventRepository(private val database: AppDatabase) {
             reminderDao.deleteByEventId(eventId)
         }
     }
+
+    /**
+     * 给一条待办打勾 / 取消打勾。
+     *
+     * 不动闹钟也不动重复规则：待办既没有提醒也没有重复，改的只有这一列。
+     */
+    suspend fun setDone(eventId: String, done: Boolean, now: Long = System.currentTimeMillis()) {
+        eventDao.setDone(eventId, done, now)
+    }
 }
